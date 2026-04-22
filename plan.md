@@ -121,15 +121,15 @@ Purpose: Create the initial project structure and provide Cursor with enough con
 
 Tasks:
 
-- [ ] Create the main project repository.
-- [ ] Create `backend/` directory.
-- [ ] Create `frontend/` directory.
-- [ ] Create `docs/` directory.
-- [ ] Add `focushome_mvp.md` to `docs/`.
-- [ ] Add `focushome_prd.md` to `docs/`.
-- [ ] Add this `plan.md` file to the project root.
-- [ ] Create a root `README.md`.
-- [ ] Add basic run instructions to `README.md`.
+- [X] Create the main project repository.
+- [X] Create `backend/` directory.
+- [X] Create `frontend/` directory.
+- [X] Create `docs/` directory.
+- [X] Add `focushome_mvp.md` to `docs/`.
+- [X] Add `focushome_prd.md` to `docs/`.
+- [X] Add this `plan.md` file to the project root.
+- [X] Create a root `README.md`.
+- [X] Add basic run instructions to `README.md`.
 
 Deliverable:
 
@@ -141,18 +141,18 @@ Purpose: Make the backend run locally with basic endpoints.
 
 Tasks:
 
-- [ ] Initialize backend project.
-- [ ] Add backend dependency file.
-- [ ] Create main backend application file.
-- [ ] Add `GET /` endpoint.
-- [ ] Add `GET /health` endpoint.
-- [ ] Add `GET /api/main` endpoint.
-- [ ] Add `POST /api/ai/parse-task` endpoint.
-- [ ] Make `/api/ai/parse-task` return mocked structured task data for now.
-- [ ] Add CORS configuration so the frontend can call the backend.
-- [ ] Add `.env.example` file.
-- [ ] Make sure no real API keys are committed.
-- [ ] Test all endpoints locally.
+- [X] Initialize backend project.
+- [X] Add backend dependency file.
+- [X] Create main backend application file.
+- [X] Add `GET /` endpoint.
+- [X] Add `GET /health` endpoint.
+- [X] Add `GET /api/main` endpoint.
+- [X] Add `POST /api/ai/parse-task` endpoint.
+- [X] Make `/api/ai/parse-task` return mocked structured task data for now.
+- [X] Add CORS configuration so the frontend can call the backend.
+- [X] Add `.env.example` file.
+- [X] Make sure no real API keys are committed.
+- [X] Test all endpoints locally.
 
 Expected endpoints:
 
@@ -207,15 +207,16 @@ Purpose: Make the frontend run locally and display a basic FocusHome screen.
 Tasks:
 
 - [ ] Initialize Flutter frontend project.
-- [ ] Create a simple landing/home screen.
-- [ ] Show app name: FocusHome.
-- [ ] Show short description of the product.
-- [ ] Add natural language task input field.
-- [ ] Add "Create Focus Task" button.
-- [ ] Add placeholder backend status area.
-- [ ] Call backend `/health` endpoint if possible.
-- [ ] Display parsed mock task result if `/api/ai/parse-task` is connected.
-- [ ] Keep UI simple and clean.
+- [X] Create a simple landing/home screen.
+- [X] Show app name: FocusHome.
+- [X] Show short description of the product.
+- [X] Add natural language task input field.
+- [X] Add "Create Focus Task" button.
+- [X] Add placeholder backend status area.
+- [X] Call backend `/health` endpoint if possible.
+- [X] Display parsed mock task result if `/api/ai/parse-task` is connected.
+- [X] Keep UI simple and clean.
+- [X] Initialize temporary React/Vite frontend scaffold because Flutter is not installed in the current environment.
 
 Deliverable:
 

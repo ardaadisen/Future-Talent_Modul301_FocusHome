@@ -148,7 +148,7 @@ Tasks:
 - [X] Add `GET /health` endpoint.
 - [X] Add `GET /api/main` endpoint.
 - [X] Add `POST /api/ai/parse-task` endpoint.
-- [X] Make `/api/ai/parse-task` return mocked structured task data for now.
+- [X] Make `/api/ai/parse-task` return structured JSON (rule-based fallback; optional OpenAI when configured — not production-hardened).
 - [X] Add CORS configuration so the frontend can call the backend.
 - [X] Add `.env.example` file.
 - [X] Make sure no real API keys are committed.
@@ -214,7 +214,7 @@ Tasks:
 - [X] Add "Create Focus Task" button.
 - [X] Add placeholder backend status area.
 - [X] Call backend `/health` endpoint if possible.
-- [X] Display parsed mock task result if `/api/ai/parse-task` is connected.
+- [X] Display parsed task result from `/api/ai/parse-task` when the backend is reachable (errors shown if offline).
 - [X] Keep UI simple and clean.
 - [X] Initialize temporary React/Vite frontend scaffold because Flutter is not installed in the current environment.
 
@@ -228,17 +228,19 @@ Purpose: Convert natural language input into structured focus tasks.
 
 Tasks:
 
-- [ ] Define request schema for AI task parsing.
-- [ ] Define response schema for parsed task data.
-- [ ] Create backend AI service module.
-- [ ] Store AI API key only in backend environment variables.
-- [ ] Add system prompt for task parsing.
-- [ ] Ask AI to return JSON only.
-- [ ] Validate AI response before sending it to frontend.
-- [ ] Add error handling for invalid AI response.
-- [ ] Add fallback behavior if AI request fails.
-- [ ] Connect frontend input to backend parse endpoint.
-- [ ] Show parsed task in a confirmation card.
+- [X] Define request schema for AI task parsing.
+- [X] Define response schema for parsed task data.
+- [X] Create backend AI service module.
+- [X] Store AI API key only in backend environment variables.
+- [X] Add system prompt for task parsing (optional OpenAI path; not production-tuned).
+- [X] Ask AI to return JSON only (optional OpenAI path; not production-hardened).
+- [X] Validate AI response before sending it to frontend (Pydantic validation + normalization; invalid provider JSON falls back).
+- [X] Add error handling for invalid AI response (fallback / safe failure path).
+- [X] Add fallback behavior if AI request fails.
+- [X] Connect frontend input to backend parse endpoint.
+- [X] Show parsed task in a confirmation card.
+
+**Note:** Optional OpenAI calls exist behind backend env vars; full production behavior (SLA, retries, strict monitoring) is **not** in scope for the current milestone.
 
 Expected user input:
 
@@ -269,13 +271,15 @@ Purpose: Ensure the app works even without AI.
 
 Tasks:
 
-- [ ] Create manual task form.
-- [ ] Add title input.
-- [ ] Add duration options: 15, 30, 45, 60 minutes.
-- [ ] Add difficulty options: Easy, Medium, Hard.
-- [ ] Save task locally.
-- [ ] Display task in task list.
-- [ ] Allow deleting pending tasks.
+- [X] Create manual task form.
+- [X] Add title input.
+- [X] Add duration options: 15, 30, 45, 60 minutes (UI uses hour/minute/second inputs; values are snapped to 15/30/45/60 when sent to the backend).
+- [X] Add difficulty options: Easy, Medium, Hard.
+- [X] Save manual task via backend (`POST /api/tasks/manual`).
+- [X] Display task in task list (merged into local React list; not a full sync with `GET /api/tasks`).
+- [ ] Allow deleting pending tasks (backend `DELETE` exists; React UI not wired).
+
+**Note:** Full task list, timer flow, and inventory display remain **partially local React state** (seed/mock data plus tasks added from the UI).
 
 Deliverable:
 
@@ -285,17 +289,19 @@ Deliverable:
 
 Purpose: Prevent incorrect AI-generated tasks from being saved directly.
 
+**Note:** Confirmation/edit UI exists in React. Saving a confirmed AI task still merges into **local React state** only (backend `POST /api/tasks/from-ai` is not wired from the frontend yet).
+
 Tasks:
 
-- [ ] Create confirmation screen/card.
-- [ ] Display parsed title.
-- [ ] Display parsed date/time.
-- [ ] Display parsed duration.
-- [ ] Display parsed difficulty.
-- [ ] Allow user to edit fields before saving.
-- [ ] Add "Confirm Task" button.
-- [ ] Add "Cancel" button.
-- [ ] Save confirmed task locally.
+- [X] Create confirmation screen/card.
+- [X] Display parsed title.
+- [X] Display parsed date/time.
+- [X] Display parsed duration.
+- [X] Display parsed difficulty.
+- [X] Allow user to edit fields before saving.
+- [X] Add "Confirm Task" button.
+- [X] Add "Cancel" button.
+- [X] Save confirmed task locally (React state; not persisted via backend from-ai endpoint).
 
 Deliverable:
 
@@ -305,15 +311,17 @@ Deliverable:
 
 Purpose: Let users complete focus sessions.
 
+**Note:** The **React/Vite** scaffold includes a working focus timer (countdown, start, pause, complete when time reaches zero, cancel). State and task status updates are **local React state** only. Backend endpoints such as `PATCH /api/tasks/{id}/start`, `.../complete`, and `.../abandon` exist but are **not called from this UI**.
+
 Tasks:
 
-- [ ] Create focus timer screen.
-- [ ] Start timer for selected task duration.
-- [ ] Show remaining time.
-- [ ] Add pause/resume if simple enough.
-- [ ] Mark task completed only if timer finishes.
-- [ ] Mark abandoned/failed if user cancels.
-- [ ] Prevent reward if task is not completed.
+- [X] Create focus timer screen.
+- [X] Start timer for selected task duration.
+- [X] Show remaining time.
+- [X] Add pause/resume if simple enough.
+- [X] Mark task completed only if timer finishes (Complete / “Claim reward” stays disabled until `remainingSeconds === 0`).
+- [X] Mark abandoned/failed if user cancels (cancel updates task status in local state; no backend abandon call).
+- [X] Prevent reward if task is not completed (reward applied in `App.jsx` only after timer reaches zero).
 
 Deliverable:
 
@@ -323,17 +331,19 @@ Deliverable:
 
 Purpose: Reward completed focus sessions.
 
+**Note:** **Backend** implements the PRD reward rules and inventory (`reward_service`, `GET /api/inventory`, rewards on `PATCH .../complete`). The **Dashboard** still reads **mock seed inventory** in React; timer “Claim reward” updates **local** XP/bricks/level only. There is **no** live sync from the UI to backend inventory after a focus session.
+
 Tasks:
 
-- [ ] Define reward rules.
-- [ ] Easy task gives 2 bricks.
-- [ ] Medium task gives 5 bricks.
-- [ ] Hard task gives 10 bricks.
-- [ ] Add XP reward.
-- [ ] Update inventory after completed task.
-- [ ] Display total bricks.
-- [ ] Display total XP.
-- [ ] Display level.
+- [X] Define reward rules (shared constants in `frontend/src/utils/rewards.js`; mirrored in backend).
+- [X] Easy task gives 2 bricks.
+- [X] Medium task gives 5 bricks.
+- [X] Hard task gives 10 bricks.
+- [X] Add XP reward.
+- [X] Update inventory after completed task (**local React state** after timer completion; not `GET/PATCH` inventory API from the frontend).
+- [X] Display total bricks.
+- [X] Display total XP.
+- [X] Display level.
 
 Deliverable:
 
@@ -342,6 +352,8 @@ Deliverable:
 ## Phase 8: Simple Home Grid
 
 Purpose: Implement the core gamification mechanic.
+
+**Note:** Backend grid API exists (`GET/POST/DELETE` under `/api/grid`). The **React/Vite** home builder still uses **mock/local grid state** (no full wiring to the backend from the UI).
 
 Tasks:
 
@@ -380,6 +392,8 @@ Deliverable:
 ## Phase 10: Local Persistence
 
 Purpose: Keep user progress after app restart.
+
+**Note:** The **backend** demo persists to `backend/data/state.json`. The **React** app does **not** yet implement full MVP local persistence (e.g. Hive/SQLite/localStorage sync for tasks, inventory, grid, XP) as described for the long-term mobile target.
 
 Tasks:
 
@@ -436,27 +450,52 @@ Deliverable:
 
 - MVP is ready for a real product demo and possible store submission.
 
+## Current Week 5 Status
+
+Completed:
+
+- FastAPI backend runs locally on port 8000.
+- Backend health, main, AI parse, task, inventory, grid, and calendar API structure exists.
+- Frontend checks backend status with `GET /health`.
+- Frontend sends natural language input to `POST /api/ai/parse-task`.
+- Frontend sends manual task creation to `POST /api/tasks/manual`.
+- Backend URL is configured with `VITE_API_BASE_URL`.
+- No real API keys are committed.
+
+Partially completed:
+
+- Task list/timer flow still uses some local React state.
+- Calendar template URL is supported without OAuth.
+- Inventory and grid API exist, but UI is still mostly mock/local.
+
+Still open:
+
+- Full Flutter/mobile implementation.
+- Full frontend sync for timer, rewards, inventory, and grid.
+- Full local/mobile persistence such as Hive/SQLite.
+- Store preparation.
+
 ## 7. Current Homework Checklist
 
 The current homework is not to complete the full product. The current goal is to prove that the project structure exists and both backend and frontend can start.
 
 For this week's homework, complete only the following:
 
-- [ ] Create project repository.
-- [ ] Add `docs/` folder.
-- [ ] Add PRD and MVP markdown files to `docs/`.
-- [ ] Add this `plan.md` file.
-- [ ] Create `backend/` folder.
-- [ ] Make backend run locally.
-- [ ] Add `GET /` endpoint.
-- [ ] Add `GET /health` endpoint.
-- [ ] Add `GET /api/main` endpoint.
-- [ ] Add mocked `POST /api/ai/parse-task` endpoint.
-- [ ] Create `frontend/` folder.
-- [ ] Make frontend run locally.
-- [ ] Show a simple FocusHome page.
-- [ ] Add README with run instructions.
-- [ ] Make sure no API keys are committed.
+- [X] Create project repository.
+- [X] Add `docs/` folder.
+- [X] Add PRD and MVP markdown files to `docs/`.
+- [X] Add this `plan.md` file.
+- [X] Create `backend/` folder.
+- [X] Make backend run locally.
+- [X] Add `GET /` endpoint.
+- [X] Add `GET /health` endpoint.
+- [X] Add `GET /api/main` endpoint.
+- [X] Add mocked/fallback `POST /api/ai/parse-task` endpoint.
+- [X] Create `frontend/` folder.
+- [X] Make frontend run locally.
+- [X] Show a simple FocusHome page.
+- [X] Add README with run instructions.
+- [X] Make sure no API keys are committed.
 
 ## 8. Cursor Execution Rule
 
@@ -478,7 +517,7 @@ This week's work is done when:
 - Backend starts locally.
 - Backend `/health` returns a valid response.
 - Backend `/api/main` returns a valid response.
-- Backend `/api/ai/parse-task` returns mocked structured JSON.
+- Backend `/api/ai/parse-task` returns structured JSON (rule-based fallback; optional OpenAI when configured).
 - Frontend starts locally.
 - Frontend displays a FocusHome page.
 - PRD, MVP, and plan documents are inside the repository.

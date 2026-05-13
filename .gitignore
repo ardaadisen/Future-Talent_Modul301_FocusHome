@@ -10,6 +10,7 @@ Thumbs.db
 !.env.example
 
 # Python / backend
+backend/data/
 __pycache__/
 *.py[cod]
 *.pyo
@@ -46,6 +47,7 @@ frontend/.vite/
 backend/.env
 frontend/.env
 frontend/.env.*
+!frontend/.env.example
 
 # Cursor local files
 .cursor/

@@ -107,6 +107,11 @@ body {
   color: #6f6659;
 }
 
+.text-danger {
+  color: #8d2e2e;
+  margin: 0;
+}
+
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

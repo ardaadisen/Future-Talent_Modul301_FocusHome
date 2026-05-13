@@ -1,4 +1,7 @@
 export function createGoogleCalendarTemplateUrl(task) {
+  if (task.calendarUrl) {
+    return task.calendarUrl;
+  }
   const title = encodeURIComponent(task.title || "Focus Session");
   const details = encodeURIComponent(task.description || "FocusHome task");
   const start = task.startTime

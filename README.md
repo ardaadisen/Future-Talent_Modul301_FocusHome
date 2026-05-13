@@ -6,6 +6,8 @@ This repository currently contains a FastAPI backend scaffold and a temporary Re
 
 ## Week 4 Frontend Submission (Mock UI)
 
+> **Update (Week 5):** Dashboard health, Create Task AI parse, and manual save can call the local backend; most other UI state remains mock. See **Frontend ↔ backend** below.
+
 Implemented this week (frontend with mock data):
 
 - Dashboard/home screen with FocusHome description, progress stats, today's tasks, quick actions
@@ -21,11 +23,9 @@ Implemented this week (frontend with mock data):
 
 What is mocked:
 
-- AI parse results
-- task data and inventory state
-- home grid content
-- reward progression persistence (local state only)
-- calendar integration (template URL only)
+- AI parse: uses the **live backend** when it is running; otherwise the UI shows a connection error (no silent mock parse).
+- Task list (seed data), timer completion rewards, inventory numbers, and home grid remain **local mock** for this demo (manual save also persists one task on the server, but the UI does not sync full inventory from the API yet).
+- Calendar: client can still build a template link; parsed tasks may include **`calendarUrl`** from the backend.
 
 ## Run Backend
 
@@ -57,8 +57,20 @@ Add your Week 4 screenshots under `docs/screenshots/` and reference them here:
 
 ## Notes
 
-- No real API keys are included or required for this week.
-- No real AI API call is used in frontend this week.
+- The frontend can call the **local FastAPI** for health, AI parse, and manual task create (`VITE_API_BASE_URL`, default `http://127.0.0.1:8000`). Restart Vite after changing `.env`.
 - Google Calendar OAuth is not implemented.
-- Backend/live integration is optional for this week frontend submission.
 - Backend API contracts are kept independent so the frontend can later be replaced with Flutter without backend changes.
+## Week 5 backend (MVP API)
+
+The FastAPI backend now exposes task lifecycle, inventory/rewards, grid placement, calendar template URLs, and optional OpenAI-backed NL parsing. See `backend/README.md` for setup, env vars, and `curl` examples.
+
+**Run the backend** on `http://127.0.0.1:8000` (default for `uvicorn` with `--host 0.0.0.0 --port 8000`).
+
+## Frontend ↔ backend (minimal integration)
+
+- Copy `frontend/.env.example` to `frontend/.env` and set **`VITE_API_BASE_URL=http://127.0.0.1:8000`** (or leave the example default).
+- Restart Vite after changing `.env`.
+- **Dashboard** calls **`GET /health`** and shows backend status (or the error: *Backend connection failed. Please start the backend on port 8000.*).
+- **Create Task → Parse with AI** calls **`POST /api/ai/parse-task`** with `text` and `timezone: "Europe/Istanbul"` and fills the parsed/confirm UI from the JSON response (including **`calendarUrl`** when present).
+- **Save Manual Task** calls **`POST /api/tasks/manual`** and adds the returned task to the local list (timer and inventory remain mock/local).
+- Task list, timer rewards, grid, and inventory stats are still **mostly mock/local** for this demo.

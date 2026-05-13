@@ -1,0 +1,45 @@
+### FocusHome manual HTTP checks (VS Code REST Client or similar)
+@base = http://127.0.0.1:8000
+
+### Health
+GET {{base}}/health
+
+### Parse (fallback without API key)
+POST {{base}}/api/ai/parse-task
+Content-Type: application/json
+
+{
+  "text": "Tomorrow at 3 PM I will study algorithms for 45 minutes.",
+  "timezone": "Europe/Istanbul"
+}
+
+### Manual task
+POST {{base}}/api/tasks/manual
+Content-Type: application/json
+
+{
+  "title": "Demo task",
+  "preset_duration": 45,
+  "difficulty_level": "HARD",
+  "description": "From manual_test.http"
+}
+
+### List tasks
+GET {{base}}/api/tasks
+
+### Inventory
+GET {{base}}/api/inventory
+
+### Calendar template URL
+POST {{base}}/api/calendar/template-url
+Content-Type: application/json
+
+{
+  "title": "Finans Çalışması",
+  "startDateTime": "2026-05-14T10:00:00",
+  "endDateTime": "2026-05-14T11:00:00",
+  "description": "Odak seansı"
+}
+
+### Grid state
+GET {{base}}/api/grid

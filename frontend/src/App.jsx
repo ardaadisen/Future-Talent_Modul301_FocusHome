@@ -5,10 +5,12 @@ import CreateTask from "./pages/CreateTask";
 import FocusTimer from "./pages/FocusTimer";
 import HomeBuilder from "./pages/HomeBuilder";
 import { initialGrid, initialInventory, initialTodayTasks } from "./data/mockData";
+import { BACKEND_UNAVAILABLE, fetchHealth, getApiBaseUrl } from "./services/api";
 import { createGoogleCalendarTemplateUrl } from "./utils/calendar";
 import { calcLevel, getRewardForDifficulty } from "./utils/rewards";
 
 export default function App() {
+  const [backendHealth, setBackendHealth] = useState({ state: "loading" });
   const [activePage, setActivePage] = useState("dashboard");
   const [tasks, setTasks] = useState(initialTodayTasks);
   const [inventory, setInventory] = useState(initialInventory);
@@ -17,6 +19,30 @@ export default function App() {
   const [remainingSeconds, setRemainingSeconds] = useState(initialTodayTasks[0].durationMinutes * 60);
   const [timerRunning, setTimerRunning] = useState(false);
   const [sessionMessage, setSessionMessage] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchHealth();
+        if (cancelled) {
+          return;
+        }
+        setBackendHealth({
+          state: "ok",
+          service: data.service,
+          baseUrl: getApiBaseUrl(),
+        });
+      } catch {
+        if (!cancelled) {
+          setBackendHealth({ state: "error", message: BACKEND_UNAVAILABLE });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!timerRunning || remainingSeconds <= 0) {
@@ -47,8 +73,8 @@ export default function App() {
 
   const addTask = (task, source = "MANUAL") => {
     const newTask = {
-      id: crypto.randomUUID(),
-      status: "PENDING",
+      id: task.id || crypto.randomUUID(),
+      status: task.status || "PENDING",
       startTime: "2026-05-07T15:00:00+03:00",
       endTime: "2026-05-07T16:00:00+03:00",
       ...task,
@@ -134,6 +160,7 @@ export default function App() {
         <Dashboard
           inventory={inventory}
           tasks={tasks}
+          backendHealth={backendHealth}
           onGotoCreate={() => setActivePage("create")}
           onGotoTimer={() => setActivePage("timer")}
           onSelectTask={selectTask}

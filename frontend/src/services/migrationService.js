@@ -3,6 +3,7 @@
  */
 
 import { saveUserState } from "./userSyncApi.js";
+import { normalizeApiError } from "../utils/apiError.js";
 import {
   exportAnonymousLocalSnapshot,
   hasAnonymousLocalData,
@@ -41,9 +42,10 @@ export async function migrateLocalToCloud(userId) {
     markMigratedForUser(userId);
     return { ok: true, migrated: true };
   } catch (err) {
+    const normalized = normalizeApiError(err, { syncAttempt: true, cloudAttempt: true });
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Migration failed",
+      error: normalized.message,
     };
   }
 }

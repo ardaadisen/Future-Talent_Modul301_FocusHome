@@ -16,7 +16,11 @@ def get_bearer_token(authorization: Optional[str] = Header(default=None)) -> Opt
 
 def get_current_user(authorization: Optional[str] = Header(default=None)) -> dict:
     token = get_bearer_token(authorization)
-    user = auth_service.resolve_user_from_token(token)
+    user, reason = auth_service.resolve_user_with_reason(token)
     if not user:
+        auth_service.log_auth_rejection(
+            header_present=bool(token),
+            reason=reason,
+        )
         raise AppError(401, "Not authenticated.")
     return user

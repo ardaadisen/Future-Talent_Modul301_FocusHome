@@ -128,7 +128,8 @@ python scripts/test_gemini_env.py
 2. Backend `.env`: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `AUTH_MODE=supabase`.
 3. Frontend `.env`: `VITE_AUTH_MODE=supabase`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (anon key only).
 4. **Email confirmation** (optional): Authentication → Providers → Email → enable *Confirm email*. The app prompts users to confirm before sign-in.
-5. **Password security**: Authentication → Settings — set min length, enable leaked-password protection and CAPTCHA if needed.
+5. **Sign-up email limits**: Supabase’s built-in email provider has strict rate limits. During local testing you may see *email rate limit exceeded* — the app shows a friendly message; the app still works in **local mode** without an account. For faster local testing, disable *Confirm email* in Supabase (Authentication → Providers → Email). For production, configure **custom SMTP** (Project Settings → Authentication → SMTP) instead of the built-in provider.
+6. **Password security**: Authentication → Settings — set min length, enable leaked-password protection and CAPTCHA if needed.
 
 ### Auth endpoints
 
@@ -165,9 +166,26 @@ Tasks, inventory, grid, and `/api/user/state` are scoped to the authenticated `u
 
 ## Persistence
 
-Runtime demo state is stored in `data/state.json` (created automatically). It contains **no secrets**. The `backend/data/` directory is gitignored.
+**Local / tests (no `DATABASE_URL`):** Runtime demo state is stored in `data/state.json` (created automatically). It contains **no secrets**. The `backend/data/` directory is gitignored.
 
-If the file is missing or invalid JSON, the app recovers to a safe default (empty tasks, zero inventory, empty grid).
+**Cloud (signed-in users with `DATABASE_URL`):** Game data is stored in Supabase Postgres. The backend reads/writes via `DATABASE_URL` only — never exposed to the frontend.
+
+### Initialize Postgres tables
+
+1. Copy your Supabase **Connection string** (URI) into `backend/.env` as `DATABASE_URL`.
+   - Use the **Session pooler** or **Direct** connection string from Supabase → Project Settings → Database.
+   - Append `?sslmode=require` if not already present.
+2. From the `backend/` directory:
+
+```bash
+python scripts/init_db.py
+```
+
+3. Open Supabase **Table Editor** — you should see: `user_profiles`, `tasks`, `inventories`, `active_homes`, `completed_homes`, `preferences`, `activity_events`.
+
+`active_homes` also stores `grid_cells` and `home_snapshot` (full client home state for 5×5 grid + build progress).
+
+If the JSON file is missing or invalid JSON, the app recovers to a safe default (empty tasks, zero inventory, empty grid).
 
 ## Endpoints (summary)
 

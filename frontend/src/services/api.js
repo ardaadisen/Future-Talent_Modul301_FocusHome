@@ -3,7 +3,14 @@
  * Backend is the single source of truth for tasks, inventory, and grid.
  */
 
-import { getAuthHeaders } from "./authSession.js";
+import {
+  getAuthHeaders,
+  getAuthHeadersAsync,
+  logApiAuthDebug,
+  pathRequiresAuth,
+  requireAccessToken,
+  signInAgainMessage,
+} from "./authSession.js";
 
 const DEFAULT_BASE = "http://127.0.0.1:8000";
 
@@ -49,10 +56,26 @@ async function parseErrorDetail(res) {
   return `Request failed (${res.status})`;
 }
 
-async function fetchJson(path, { method = "GET", body, headers = {} } = {}) {
+export async function fetchJson(path, { method = "GET", body, headers = {} } = {}) {
+  const needsAuth = pathRequiresAuth(path);
+  let requestHeaders;
+
+  if (needsAuth) {
+    const token = await requireAccessToken();
+    if (!token) {
+      logApiAuthDebug(path, {}, "cloud");
+      throw new Error(signInAgainMessage());
+    }
+    requestHeaders = await getAuthHeadersAsync(headers);
+    logApiAuthDebug(path, requestHeaders, "cloud");
+  } else {
+    requestHeaders = getAuthHeaders(headers);
+    logApiAuthDebug(path, requestHeaders, "local");
+  }
+
   const init = {
     method,
-    headers: getAuthHeaders(headers),
+    headers: requestHeaders,
   };
   if (body !== undefined) {
     init.body = typeof body === "string" ? body : JSON.stringify(body);
@@ -65,7 +88,13 @@ async function fetchJson(path, { method = "GET", body, headers = {} } = {}) {
     throw new Error(BACKEND_UNAVAILABLE);
   }
   if (!res.ok) {
-    throw new Error(await parseErrorDetail(res));
+    const detail = await parseErrorDetail(res);
+    const err = new Error(detail);
+    err.status = res.status;
+    if (import.meta.env.DEV) {
+      console.warn("[api] request failed", path, "status:", res.status, "detail:", detail);
+    }
+    throw err;
   }
   if (res.status === 204) {
     return null;

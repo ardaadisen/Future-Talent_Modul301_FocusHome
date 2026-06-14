@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import secrets
 from typing import Any, Optional
@@ -14,10 +15,14 @@ from app.config import (
     is_supabase_auth,
     jwt_verification_configured,
     supabase_jwt_secret,
+    supabase_url,
 )
+from app.database import is_cloud_db_configured
 from app.errors import AppError
 from app.storage import mutate_state, read_state
 from app.user_data import ensure_user_bucket
+
+logger = logging.getLogger("focushome.auth")
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _PASSWORD_SPECIAL = re.compile(r"[^A-Za-z0-9]")
@@ -149,35 +154,218 @@ def login(email: str, password: str) -> dict[str, Any]:
     return _mock_login(email, password)
 
 
-def _verify_supabase_jwt(token: str) -> Optional[dict[str, Any]]:
-    if not jwt_verification_configured():
+def _jwt_issuer() -> Optional[str]:
+    base = supabase_url()
+    if not base:
         return None
+    return f"{base.rstrip('/')}/auth/v1"
+
+
+def _decode_supabase_jwt(token: str) -> tuple[Optional[dict[str, Any]], str]:
+    if not jwt_verification_configured():
+        return None, "jwt_secret_missing"
+
+    if not supabase_jwt_secret() and not supabase_url():
+        return None, "jwt_secret_missing"
+
     try:
-        payload = jwt.decode(
-            token,
-            supabase_jwt_secret(),
-            algorithms=["HS256"],
-            audience="authenticated",
-            options={"require": ["sub", "exp"]},
-        )
+        header = jwt.get_unverified_header(token)
     except jwt.PyJWTError:
+        return None, "invalid_token"
+
+    issuer = _jwt_issuer()
+    decode_options = {"require": ["sub", "exp"]}
+    algorithm = str(header.get("alg") or "")
+
+    # Supabase access tokens are usually ES256/RS256 — verify via JWKS first.
+    if supabase_url() and algorithm in ("RS256", "ES256", "EdDSA"):
+        payload, reason = _decode_with_jwks(token, issuer, decode_options)
+        if payload:
+            return payload, "ok"
+        if reason == "expired_token":
+            return None, "expired_token"
+
+    secret = supabase_jwt_secret()
+    if secret and algorithm == "HS256":
+        payload, reason = _decode_with_hs256(token, secret, issuer, decode_options)
+        if payload:
+            return payload, "ok"
+        if reason == "expired_token":
+            return None, "expired_token"
+
+    # Fallback: try the other method when alg was unknown or first method failed.
+    if supabase_url():
+        payload, reason = _decode_with_jwks(token, issuer, decode_options)
+        if payload:
+            return payload, "ok"
+        if reason == "expired_token":
+            return None, "expired_token"
+
+    if secret:
+        payload, reason = _decode_with_hs256(token, secret, issuer, decode_options)
+        if payload:
+            return payload, "ok"
+        return None, reason
+
+    return None, "invalid_token"
+
+
+def _decode_with_hs256(
+    token: str,
+    secret: str,
+    issuer: Optional[str],
+    decode_options: dict[str, Any],
+) -> tuple[Optional[dict[str, Any]], str]:
+    attempts = [False, True] if issuer else [False]
+    last_reason = "invalid_token"
+    for verify_iss in attempts:
+        try:
+            kwargs: dict[str, Any] = {
+                "algorithms": ["HS256"],
+                "audience": "authenticated",
+                "leeway": 30,
+                "options": {**decode_options, "verify_iss": verify_iss},
+            }
+            if verify_iss and issuer:
+                kwargs["issuer"] = issuer
+            payload = jwt.decode(token, secret, **kwargs)
+            return payload, "ok"
+        except jwt.ExpiredSignatureError:
+            return None, "expired_token"
+        except jwt.PyJWTError:
+            last_reason = "invalid_token"
+    return None, last_reason
+
+
+def _decode_with_jwks(
+    token: str,
+    issuer: Optional[str],
+    decode_options: dict[str, Any],
+) -> tuple[Optional[dict[str, Any]], str]:
+    base_url = supabase_url()
+    if not base_url:
+        return None, "jwt_secret_missing"
+
+    try:
+        from jwt import PyJWKClient
+
+        jwk_client = PyJWKClient(f"{base_url}/auth/v1/.well-known/jwks.json", cache_keys=True)
+        signing_key = jwk_client.get_signing_key_from_jwt(token)
+    except jwt.PyJWTError:
+        return None, "invalid_token"
+    except ImportError:
+        logger.error("cryptography package missing — cannot verify Supabase ES256 JWTs")
+        return None, "invalid_token"
+    except Exception:
+        logger.debug("JWKS client error", exc_info=True)
+        return None, "invalid_token"
+
+    attempts = [False, True] if issuer else [False]
+    last_reason = "invalid_token"
+    for verify_iss in attempts:
+        try:
+            kwargs: dict[str, Any] = {
+                "algorithms": ["RS256", "ES256", "EdDSA"],
+                "audience": "authenticated",
+                "leeway": 30,
+                "options": {**decode_options, "verify_iss": verify_iss},
+            }
+            if verify_iss and issuer:
+                kwargs["issuer"] = issuer
+            payload = jwt.decode(token, signing_key.key, **kwargs)
+            return payload, "ok"
+        except jwt.ExpiredSignatureError:
+            return None, "expired_token"
+        except jwt.PyJWTError:
+            last_reason = "invalid_token"
+    return None, last_reason
+
+
+def log_auth_rejection(*, header_present: bool, reason: str, decode_attempted: bool | None = None) -> None:
+    from app.config import jwt_verification_configured
+
+    attempted = (
+        decode_attempted
+        if decode_attempted is not None
+        else jwt_verification_configured() and header_present
+    )
+    logger.warning(
+        "Auth rejected header_present=%s decode_attempted=%s reason=%s",
+        header_present,
+        attempted,
+        reason,
+    )
+
+
+def resolve_user_with_reason(token: Optional[str]) -> tuple[Optional[dict[str, Any]], str]:
+    if not token:
+        return None, "missing_header"
+    token = token.strip()
+
+    state = read_state()
+    if token in state.get("revoked_tokens", []):
+        return None, "invalid_token"
+
+    if jwt_verification_configured():
+        payload, reason = _decode_supabase_jwt(token)
+        if not payload:
+            return None, reason
+        user_id = str(payload.get("sub") or "").strip()
+        if not user_id:
+            return None, "invalid_token"
+        email = payload.get("email")
+        user = _finalize_supabase_user(user_id, email)
+        return user, "ok"
+
+    if is_mock_auth_enabled():
+        if token.startswith("dev-user-"):
+            user_id = token.replace("dev-", "", 1)
+            return (
+                {"userId": user_id, "email": _mock_email_for_user(state, user_id), "mode": "mock"},
+                "ok",
+            )
+        if token.startswith("dev-"):
+            user_id = token[4:]
+            return (
+                {"userId": user_id, "email": _mock_email_for_user(state, user_id), "mode": "mock"},
+                "ok",
+            )
+
+    if is_supabase_auth():
+        return None, "jwt_secret_missing" if not jwt_verification_configured() else "invalid_token"
+
+    return None, "invalid_token"
+
+
+def _finalize_supabase_user(user_id: str, email: Any) -> dict[str, Any]:
+    if is_cloud_db_configured():
+        from app.user_scope import ensure_user_data
+
+        ensure_user_data(user_id, email=str(email) if email else None)
+    else:
+        def ensure_bucket(state: dict[str, Any]) -> bool:
+            ensure_user_bucket(state, user_id)
+            return True
+
+        mutate_state(ensure_bucket)
+    logger.info("Authenticated user_id=%s via Supabase JWT", user_id)
+    return {
+        "userId": user_id,
+        "email": email,
+        "mode": "supabase",
+    }
+
+
+def _verify_supabase_jwt(token: str) -> Optional[dict[str, Any]]:
+    payload, reason = _decode_supabase_jwt(token)
+    if not payload:
         return None
 
     user_id = str(payload.get("sub") or "").strip()
     if not user_id:
         return None
     email = payload.get("email")
-
-    def ensure_bucket(state: dict[str, Any]) -> bool:
-        ensure_user_bucket(state, user_id)
-        return True
-
-    mutate_state(ensure_bucket)
-    return {
-        "userId": user_id,
-        "email": email,
-        "mode": "supabase",
-    }
+    return _finalize_supabase_user(user_id, email)
 
 
 def _mock_email_for_user(state: dict[str, Any], user_id: str) -> Optional[str]:
@@ -191,27 +379,5 @@ def _mock_email_for_user(state: dict[str, Any], user_id: str) -> Optional[str]:
 
 
 def resolve_user_from_token(token: Optional[str]) -> Optional[dict[str, Any]]:
-    if not token:
-        return None
-    token = token.strip()
-
-    state = read_state()
-    if token in state.get("revoked_tokens", []):
-        return None
-
-    if is_supabase_auth():
-        return _verify_supabase_jwt(token)
-
-    if token.startswith("dev-user-"):
-        user_id = token.replace("dev-", "", 1)
-        return {"userId": user_id, "email": _mock_email_for_user(state, user_id), "mode": "mock"}
-    if token.startswith("dev-"):
-        user_id = token[4:]
-        return {"userId": user_id, "email": _mock_email_for_user(state, user_id), "mode": "mock"}
-
-    if is_mock_auth_enabled():
-        supabase_user = _verify_supabase_jwt(token)
-        if supabase_user:
-            return supabase_user
-
-    return None
+    user, _reason = resolve_user_with_reason(token)
+    return user

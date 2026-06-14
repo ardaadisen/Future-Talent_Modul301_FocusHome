@@ -1,32 +1,15 @@
-import { getApiBaseUrl } from "./api.js";
-import { getAuthHeaders } from "./authSession.js";
-
-function baseUrl() {
-  return getApiBaseUrl();
-}
+import { fetchJson, getApiBaseUrl } from "./api.js";
 
 export async function fetchUserState() {
-  const r = await fetch(`${baseUrl()}/api/user/state`, {
-    headers: getAuthHeaders(),
-  });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.detail || "Failed to load user data");
-  return data;
+  return fetchJson("/api/user/state", { method: "GET" });
 }
 
 export async function saveUserState(payload) {
-  const r = await fetch(`${baseUrl()}/api/user/state`, {
-    method: "PUT",
-    headers: getAuthHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify(payload),
-  });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.detail || "Failed to save user data");
-  return data;
+  return fetchJson("/api/user/state", { method: "PUT", body: payload });
 }
 
 export async function fetchBackendInfo() {
-  const r = await fetch(`${baseUrl()}/api/main`);
+  const r = await fetch(`${getApiBaseUrl()}/api/main`);
   if (!r.ok) return null;
   return r.json();
 }

@@ -10,6 +10,7 @@ import { formatDuration } from "../utils/format.js";
 import { applyUserTheme } from "../utils/userPreferences.js";
 
 import { combineDurationSeconds, splitDurationSeconds } from "../utils/userPreferences.js";
+import { normalizeApiError } from "../utils/apiError.js";
 
 export function SettingsPage({
   userProfile,
@@ -117,7 +118,10 @@ export function SettingsPage({
       setAccountMessage(msg);
       await loadAll(true);
     } catch (err) {
-      setSyncError(err instanceof Error ? err.message : t("auth.migrationFailed"));
+      setSyncError(
+        normalizeApiError(err, { syncAttempt: true, cloudAttempt: true }).message
+          || t("auth.migrationFailed"),
+      );
     } finally {
       setSyncPending(false);
     }
@@ -171,7 +175,7 @@ export function SettingsPage({
       <section className="settings-card card">
         <h2 className="settings-card-title">{t("common.account")}</h2>
         <p className="settings-card-lead">
-          {isCloudMode && isAuthenticated
+          {isAuthenticated
             ? t("settings.signedInAs", { email: user?.email || user?.userId })
             : cloudNotConfigured
               ? t("settings.localModeCloudUnavailable")

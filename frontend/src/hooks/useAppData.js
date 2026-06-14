@@ -7,10 +7,11 @@ import {
   mapInventoryFromApi,
   mapTaskFromApi,
 } from "../utils/apiMappers.js";
-import { getDataProvider } from "../services/dataProvider.js";
+import { LocalDataProvider } from "../services/LocalDataProvider.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { getDataSyncMode, SYNC_MODE } from "../utils/syncMode.js";
 import { normalizeApiError } from "../utils/apiError.js";
+import { resolveTaskDataProvider, runTaskMutation } from "../utils/taskDataMode.js";
 import { slotLabel, tierLabel } from "../i18n/labels.js";
 import { getStoredLanguage, translate } from "../i18n/translations.js";
 import { getUserId } from "../utils/format.js";
@@ -72,7 +73,8 @@ const startsInCloudMode = getDataSyncMode(false) === SYNC_MODE.CLOUD;
 
 export function useAppData() {
   const { user, syncMode } = useAuth();
-  const provider = useMemo(() => getDataProvider(syncMode), [syncMode]);
+  const syncModeRef = useRef(syncMode);
+  syncModeRef.current = syncMode;
   const [tasks, setTasks] = useState(initialLocal.tasks);
   const [inventory, setInventory] = useState(initialLocal.inventory);
   const [grid, setGrid] = useState(initialLocal.grid);
@@ -90,8 +92,6 @@ export function useAppData() {
   const [recentlyCompletedTaskId, setRecentlyCompletedTaskId] = useState(null);
   const [highlightBuildArea, setHighlightBuildArea] = useState(false);
   const [cloudSyncConfigured, setCloudSyncConfigured] = useState(syncMode === SYNC_MODE.CLOUD);
-  const syncModeRef = useRef(syncMode);
-  syncModeRef.current = syncMode;
 
   const uiT = useCallback((key, params) => translate(getStoredLanguage(), key, params), []);
 
@@ -117,12 +117,13 @@ export function useAppData() {
 
   const loadAll = useCallback(async (showLoading = false) => {
     const mode = syncModeRef.current;
-    const isCloud = mode === SYNC_MODE.CLOUD;
+    const { provider: activeProvider, mode: effectiveMode } = await resolveTaskDataProvider(mode);
+    const isCloud = effectiveMode === SYNC_MODE.CLOUD;
     if (showLoading) setLoading(true);
     try {
       setError(null);
       setOffline(false);
-      const data = await provider.loadAll();
+      const data = await activeProvider.loadAll();
       setTasks(data.tasks);
       setInventory(data.inventory);
       setGrid(data.grid);
@@ -133,17 +134,25 @@ export function useAppData() {
       });
       setCloudSyncConfigured(isCloud);
     } catch (errorValue) {
-      const normalized = normalizeApiError(errorValue);
+      const normalized = normalizeApiError(errorValue, { cloudAttempt: mode === SYNC_MODE.CLOUD });
       setError(normalized.message || translate(getStoredLanguage(), "error.loadData"));
       setOffline(normalized.code === "API_UNREACHABLE");
-      if (!isCloud) {
-        loadLocalState();
+      if (isCloud || mode === SYNC_MODE.CLOUD) {
+        try {
+          const local = await LocalDataProvider.loadAll();
+          setTasks(local.tasks);
+          setInventory(local.inventory);
+          setGrid(local.grid);
+        } catch {
+          /* keep previous in-memory state */
+        }
       }
+      loadLocalState();
     } finally {
       if (showLoading) setLoading(false);
-      if (!isCloud) setLocalReady(true);
+      setLocalReady(true);
     }
-  }, [loadLocalState, provider]);
+  }, [loadLocalState]);
 
   useEffect(() => {
     const isCloud = syncMode === SYNC_MODE.CLOUD;
@@ -152,7 +161,7 @@ export function useAppData() {
       setLoading(false);
     }
     void loadAll(isCloud);
-  }, [syncMode, user?.userId, loadAll]);
+  }, [syncMode, user?.userId, user?.token, loadAll]);
 
   useEffect(() => {
     if (!reward) return;
@@ -204,14 +213,23 @@ export function useAppData() {
     try {
       setError(null);
       setOffline(false);
-      const created = await provider.createManualTask(payload);
+      const { result: created, fallback, authNotice } = await runTaskMutation(
+        syncModeRef.current,
+        (activeProvider) => activeProvider.createManualTask(payload),
+      );
+      if (authNotice?.message) {
+        setError(authNotice.message);
+      }
       let task = created;
       task = await enrichManualTaskWithCalendar(task, payload);
       await loadAll();
       showReward("reward.sessionReady", "info");
+      if (fallback && import.meta.env.DEV) {
+        console.warn("[useAppData] task saved locally after cloud auth failure");
+      }
       return task;
     } catch (errorValue) {
-      const normalized = normalizeApiError(errorValue);
+      const normalized = normalizeApiError(errorValue, { cloudAttempt: syncModeRef.current === SYNC_MODE.CLOUD });
       setError(normalized.message);
       setOffline(normalized.code === "API_UNREACHABLE");
       throw errorValue;
@@ -224,7 +242,8 @@ export function useAppData() {
     setError(null);
     setOffline(false);
     try {
-      return await provider.parseAiTask(input);
+      const { provider: activeProvider } = await resolveTaskDataProvider(syncModeRef.current);
+      return await activeProvider.parseAiTask(input);
     } catch (errorValue) {
       const normalized = normalizeApiError(errorValue);
       setError(normalized.message);
@@ -239,12 +258,18 @@ export function useAppData() {
       setError(null);
       setOffline(false);
       const body = await mapAiParsedToFromApi(parsedTask);
-      const task = await provider.createFromAiTask(body);
+      const { result: task, authNotice } = await runTaskMutation(
+        syncModeRef.current,
+        (activeProvider) => activeProvider.createFromAiTask(body),
+      );
+      if (authNotice?.message) {
+        setError(authNotice.message);
+      }
       await loadAll();
       showReward("reward.aiSessionAdded", "info");
       return task;
     } catch (errorValue) {
-      const normalized = normalizeApiError(errorValue);
+      const normalized = normalizeApiError(errorValue, { cloudAttempt: syncModeRef.current === SYNC_MODE.CLOUD });
       setError(normalized.message);
       setOffline(normalized.code === "API_UNREACHABLE");
       throw errorValue;
@@ -253,17 +278,26 @@ export function useAppData() {
     }
   };
 
+  const withTaskProvider = useCallback(async (fn) => {
+    const { provider: activeProvider } = await resolveTaskDataProvider(syncModeRef.current);
+    return fn(activeProvider);
+  }, []);
+
   const startTaskById = async (taskId) => {
     setMutating(true);
     try {
       setError(null);
       setOffline(false);
-      const mapped = await provider.startTask(taskId);
+      const { result: mapped, authNotice } = await runTaskMutation(
+        syncModeRef.current,
+        (activeProvider) => activeProvider.startTask(taskId),
+      );
+      if (authNotice?.message) setError(authNotice.message);
       setTasks((prev) => prev.map((t) => (t.id === mapped.id ? mapped : t)));
       setSelectedTask((current) => (current?.id === taskId ? mapped : current));
       return mapped;
     } catch (errorValue) {
-      const normalized = normalizeApiError(errorValue);
+      const normalized = normalizeApiError(errorValue, { cloudAttempt: syncModeRef.current === SYNC_MODE.CLOUD });
       setError(normalized.message);
       setOffline(normalized.code === "API_UNREACHABLE");
       throw errorValue;
@@ -277,12 +311,16 @@ export function useAppData() {
     try {
       setError(null);
       setOffline(false);
-      await provider.deleteTask(taskId);
+      const { authNotice } = await runTaskMutation(
+        syncModeRef.current,
+        (activeProvider) => activeProvider.deleteTask(taskId),
+      );
+      if (authNotice?.message) setError(authNotice.message);
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
       setSelectedTask((current) => (current?.id === taskId ? null : current));
       showReward("reward.sessionDeleted", "info");
     } catch (errorValue) {
-      const normalized = normalizeApiError(errorValue);
+      const normalized = normalizeApiError(errorValue, { cloudAttempt: syncModeRef.current === SYNC_MODE.CLOUD });
       setError(normalized.message);
       setOffline(normalized.code === "API_UNREACHABLE");
       throw errorValue;
@@ -298,13 +336,17 @@ export function useAppData() {
       setOffline(false);
       const beforeXp = inventory?.totalXp ?? 0;
       const beforeBricks = inventory?.resources?.bricks ?? 0;
-      const result = await provider.completeTask(taskId);
+      const { result, authNotice } = await runTaskMutation(
+        syncModeRef.current,
+        (activeProvider) => activeProvider.completeTask(taskId),
+      );
+      if (authNotice?.message) setError(authNotice.message);
       const mappedTask = result.task;
       const mappedInventory = result.inventory;
       setTasks((prev) => prev.map((t) => (t.id === mappedTask.id ? mappedTask : t)));
       setInventory(mappedInventory);
       setSelectedTask((current) => (current?.id === taskId ? mappedTask : current));
-      const gridData = await provider.fetchGrid();
+      const gridData = await withTaskProvider((activeProvider) => activeProvider.fetchGrid());
       setGrid(gridData);
       loadLocalState();
       const xpGained = Math.max(0, (mappedInventory.totalXp ?? 0) - beforeXp);
@@ -312,7 +354,7 @@ export function useAppData() {
       setRecentlyCompletedTaskId(taskId);
       showSessionCompleteReward(xpGained, bricksGained);
     } catch (errorValue) {
-      const normalized = normalizeApiError(errorValue);
+      const normalized = normalizeApiError(errorValue, { cloudAttempt: syncModeRef.current === SYNC_MODE.CLOUD });
       setError(normalized.message);
       setOffline(normalized.code === "API_UNREACHABLE");
     } finally {
@@ -325,11 +367,15 @@ export function useAppData() {
     try {
       setError(null);
       setOffline(false);
-      await provider.abandonTask(taskId);
+      const { authNotice } = await runTaskMutation(
+        syncModeRef.current,
+        (activeProvider) => activeProvider.abandonTask(taskId),
+      );
+      if (authNotice?.message) setError(authNotice.message);
       await loadAll();
       showReward("reward.sessionAbandoned", "info");
     } catch (errorValue) {
-      const normalized = normalizeApiError(errorValue);
+      const normalized = normalizeApiError(errorValue, { cloudAttempt: syncModeRef.current === SYNC_MODE.CLOUD });
       setError(normalized.message);
       setOffline(normalized.code === "API_UNREACHABLE");
     } finally {
@@ -342,18 +388,20 @@ export function useAppData() {
     try {
       setError(null);
       setOffline(false);
-      const gridData = await provider.placeGridAsset({
-        x,
-        y,
-        assetId: "wall_v1",
-        resourceCost: { bricks: 1, glass: 0, roofTiles: 0 },
-      });
+      const gridData = await withTaskProvider((activeProvider) =>
+        activeProvider.placeGridAsset({
+          x,
+          y,
+          assetId: "wall_v1",
+          resourceCost: { bricks: 1, glass: 0, roofTiles: 0 },
+        }),
+      );
       setGrid(gridData);
-      const inventoryData = await provider.fetchInventory();
+      const inventoryData = await withTaskProvider((activeProvider) => activeProvider.fetchInventory());
       setInventory(inventoryData);
       showReward("reward.brickPlaced", "brick");
     } catch (errorValue) {
-      const normalized = normalizeApiError(errorValue);
+      const normalized = normalizeApiError(errorValue, { cloudAttempt: syncModeRef.current === SYNC_MODE.CLOUD });
       setError(normalized.message);
       setOffline(normalized.code === "API_UNREACHABLE");
       throw errorValue;
@@ -367,7 +415,7 @@ export function useAppData() {
     try {
       setError(null);
       setOffline(false);
-      const gridData = await provider.removeGridCell(x, y);
+      const gridData = await withTaskProvider((activeProvider) => activeProvider.removeGridCell(x, y));
       setGrid(gridData);
       showReward("reward.blockRemoved", "info");
     } catch (errorValue) {
@@ -553,7 +601,7 @@ export function useAppData() {
       setError(null);
       setOffline(false);
       // TODO: POST /api/dev/reset when backend endpoint exists.
-      await provider.resetGameData?.();
+      await withTaskProvider((activeProvider) => activeProvider.resetGameData?.());
       resetLocalHomeData();
       await loadAll();
       showReward("reward.homeCleared", "info");

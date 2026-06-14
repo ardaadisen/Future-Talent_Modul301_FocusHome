@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from fastapi.testclient import TestClient
 
+from app.services import auth_service
 from main import app
 from tests.auth_helpers import TEST_PASSWORD, register_and_login
 
@@ -57,6 +58,32 @@ def test_user_a_cannot_see_user_b_tasks():
 
     get_b = client.get(f"/api/tasks/{task_id}", headers=headers_b)
     assert get_b.status_code == 404
+
+
+def test_auth_rejection_reason_missing_header():
+    user, reason = auth_service.resolve_user_with_reason(None)
+    assert user is None
+    assert reason == "missing_header"
+
+
+def test_supabase_jwt_auth_local_mode(monkeypatch):
+    secret = "test-jwt-secret-for-pytest-local"
+    monkeypatch.setenv("AUTH_MODE", "local")
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", secret)
+
+    user_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    exp = datetime.now(timezone.utc) + timedelta(hours=1)
+    token = jwt.encode(
+        {"sub": user_id, "email": "local-jwt@example.com", "aud": "authenticated", "exp": exp},
+        secret,
+        algorithm="HS256",
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.get("/api/tasks", headers=headers)
+    assert r.status_code == 200
+
+    monkeypatch.setenv("AUTH_MODE", "mock")
 
 
 def test_supabase_jwt_auth(monkeypatch):

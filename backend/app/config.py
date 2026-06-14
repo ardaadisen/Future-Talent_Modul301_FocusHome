@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+from app.database import get_database_url
+
+logger = logging.getLogger("focushome.config")
 
 _BACKEND_DIR = Path(__file__).resolve().parents[1]
 _ENV_FILE = _BACKEND_DIR / ".env"
@@ -60,4 +65,22 @@ def supabase_configured() -> bool:
 
 
 def jwt_verification_configured() -> bool:
-    return bool(supabase_jwt_secret())
+    return bool(supabase_jwt_secret()) or bool(supabase_url())
+
+
+def log_auth_startup_config() -> None:
+    """Log auth-related env presence only — never secret values."""
+    logger.info("Loading env from: %s (exists=%s)", _ENV_FILE, _ENV_FILE.is_file())
+    logger.info("AUTH_MODE=%s", auth_mode())
+    logger.info("SUPABASE_URL present: %s", bool(supabase_url()))
+    logger.info("SUPABASE_SERVICE_ROLE_KEY present: %s", bool(supabase_service_role_key()))
+    logger.info("SUPABASE_JWT_SECRET present: %s", bool(supabase_jwt_secret()))
+    logger.info("DATABASE_URL present: %s", bool(get_database_url()))
+    try:
+        import cryptography  # noqa: F401
+
+        logger.info("cryptography present: True (required for Supabase ES256 JWT)")
+    except ImportError:
+        logger.warning(
+            "cryptography present: False — install with `pip install cryptography` for Supabase ES256 tokens"
+        )

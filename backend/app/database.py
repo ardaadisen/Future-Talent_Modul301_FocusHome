@@ -1,8 +1,4 @@
-"""Database connection placeholder for Supabase Postgres.
-
-TODO: When DATABASE_URL is set, use asyncpg or SQLAlchemy for per-user persistence.
-User-owned data (tasks, inventory, homes, decorations) must be stored with user_id.
-"""
+"""Database connection placeholder for Supabase Postgres."""
 
 from __future__ import annotations
 

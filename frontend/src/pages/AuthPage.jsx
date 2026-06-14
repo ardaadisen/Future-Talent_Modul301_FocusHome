@@ -7,6 +7,7 @@ import {
   validateRegisterPassword,
   validateSignInPassword,
 } from "../utils/authValidation.js";
+import { mapAuthProviderError } from "../utils/authErrors.js";
 
 export function AuthPage({ standalone = false, onSuccess, cloudOnly = false }) {
   const {
@@ -72,16 +73,14 @@ export function AuthPage({ standalone = false, onSuccess, cloudOnly = false }) {
           setConfirmRequired(true);
           setSuccess(t("auth.accountCreatedConfirm"));
         } else {
-          setMode("login");
-          setPassword("");
-          setSuccess(result?.migrationMsg || t("auth.accountCreated"));
           if (result?.migrationMsg) {
-            onSuccess?.();
+            setSuccess(result.migrationMsg);
           }
+          onSuccess?.();
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("auth.authFailed"));
+      setError(mapAuthProviderError(err));
     } finally {
       setPending(false);
     }

@@ -27,8 +27,16 @@ export function isMockAuthEnabled() {
   return import.meta.env.DEV && import.meta.env.VITE_ENABLE_MOCK_AUTH === "true";
 }
 
-export function getDataSyncMode(isAuthenticated) {
-  if (isAuthenticated && isCloudConfigured()) {
+export function getDataSyncMode(isAuthenticated, accessToken) {
+  const authenticated = typeof isAuthenticated === "object" && isAuthenticated !== null
+    ? Boolean(isAuthenticated.authenticated)
+    : Boolean(isAuthenticated);
+  const token = typeof isAuthenticated === "object" && isAuthenticated !== null
+    ? isAuthenticated.accessToken
+    : accessToken;
+  const hasToken = Boolean(token);
+
+  if (authenticated && hasToken && isCloudConfigured()) {
     return SYNC_MODE.CLOUD;
   }
   if (!isCloudConfigured()) {

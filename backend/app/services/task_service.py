@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -19,6 +20,8 @@ from app.schemas import (
 from app.services import ai_service, reward_service
 from app.user_scope import mutate_user_bucket, task_belongs_to_user
 
+logger = logging.getLogger("focushome.tasks")
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -32,6 +35,8 @@ def _find_task_index(tasks: list[dict[str, Any]], task_id: str) -> int:
 
 
 def create_manual(user_id: str, payload: ManualTaskCreate) -> TaskObject:
+    logger.info("create_manual user_id=%s title=%s", user_id, payload.title[:50])
+
     def mutator(bucket: dict[str, Any]) -> TaskObject:
         tid = str(uuid.uuid4())
         row: dict[str, Any] = {
@@ -58,6 +63,7 @@ def create_manual(user_id: str, payload: ManualTaskCreate) -> TaskObject:
 
 
 def create_from_ai(user_id: str, payload: TaskFromAIRequest) -> TaskObject:
+    logger.info("create_from_ai user_id=%s title=%s", user_id, payload.title[:50])
     delta_seconds = max(
         int((payload.endDateTime - payload.startDateTime).total_seconds()),
         int(payload.durationMinutes) * 60,

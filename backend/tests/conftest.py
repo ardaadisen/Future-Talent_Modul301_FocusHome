@@ -11,4 +11,7 @@ def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTH_MODE", "mock")
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.delenv("SUPABASE_JWT_SECRET", raising=False)
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     yield

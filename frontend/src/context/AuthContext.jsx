@@ -15,6 +15,7 @@ import {
 } from "../utils/syncMode.js";
 import { withTimeout } from "../utils/withTimeout.js";
 import { getStoredLanguage, translate } from "../i18n/translations.js";
+import { mapAuthProviderError } from "../utils/authErrors.js";
 
 const AuthContext = createContext(null);
 
@@ -34,7 +35,7 @@ export function AuthProvider({ children }) {
   const [migrationMessage, setMigrationMessage] = useState(null);
   const [authActionError, setAuthActionError] = useState(null);
 
-  const syncMode = getDataSyncMode(Boolean(user));
+  const syncMode = getDataSyncMode({ authenticated: Boolean(user), accessToken: user?.token });
   const cloudConfigured = isCloudConfigured();
 
   const applySession = useCallback((sessionLike) => {
@@ -95,8 +96,11 @@ export function AuthProvider({ children }) {
 
     void restoreSession();
 
-    const { data: sub } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabaseClient.auth.onAuthStateChange((event, session) => {
       applySession(mapSupabaseSession(session));
+      if (import.meta.env.DEV && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
+        console.info("[auth] session updated:", event);
+      }
     });
 
     return () => {
@@ -115,7 +119,7 @@ export function AuthProvider({ children }) {
         AUTH_REQUEST_TIMEOUT_MS,
         translate(getStoredLanguage(), "auth.requestTimedOut"),
       );
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(mapAuthProviderError(error));
       if (!data.session) {
         throw new Error(translate(getStoredLanguage(), "auth.signInFailed"));
       }
@@ -138,7 +142,7 @@ export function AuthProvider({ children }) {
         AUTH_REQUEST_TIMEOUT_MS,
         translate(getStoredLanguage(), "auth.requestTimedOut"),
       );
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(mapAuthProviderError(error));
 
       const needsConfirm = !data.session;
       setEmailConfirmRequired(needsConfirm);
@@ -218,7 +222,7 @@ export function AuthProvider({ children }) {
     if (!user?.token) {
       throw new Error(translate(getStoredLanguage(), "auth.noCloudAccount"));
     }
-    await deleteAccountApi(user.token);
+    await deleteAccountApi();
     try {
       if (supabaseClient) await supabaseClient.auth.signOut();
     } finally {

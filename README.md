@@ -1,8 +1,58 @@
 # FocusHome
 
-FocusHome is an AI-assisted focus planning app. Users describe what they want to work on in natural language, confirm a structured focus session, complete timed tasks, earn XP and bricks, and build a virtual 5×5 home. The app works **fully offline on one device** (local mode) and optionally syncs progress to the cloud when the user signs in with Supabase.
+**UpSchool Modul 301 — final submission**
 
-**UpSchool Modul 301 — final submission.** Deployment target: **Vercel** (frontend) + **Render** (backend) + **Supabase** (auth + Postgres). No AWS.
+FocusHome is a productivity app with gamified home-building. Users create **focus sessions** (manually or with AI), run a **focus timer**, earn **XP and bricks**, and use those resources to **build and decorate** a virtual home. The app works in **local mode** on one device without an account, or with **Supabase sign-in** to sync progress across devices.
+
+**Hosting:** Vercel (frontend) · Render (backend) · Supabase (auth + Postgres). No AWS.
+
+---
+
+## Live demo
+
+| Resource | URL |
+|----------|-----|
+| **Live app (frontend)** | https://future-talent-modul301-focus-home.vercel.app |
+| **Backend API** | https://focushome-backend.onrender.com |
+| **Health check** | https://focushome-backend.onrender.com/health |
+
+> **Note:** The backend runs on Render’s free tier and **may sleep after inactivity**. The first request after sleep can take 30–60 seconds while the service wakes up. Refresh or wait briefly if the app feels slow on first load.
+
+---
+
+## How to use the live app
+
+1. Open https://future-talent-modul301-focus-home.vercel.app
+2. **Local mode:** use the app immediately — no sign-in required. Progress stays on this browser/device.
+3. **Create a session:**
+   - **Manual:** enter title, duration, difficulty.
+   - **AI Plan Assistant:** describe your plan in natural language → review the suggestion → confirm.
+4. **Focus:** select a session → **Start** the timer → **Complete** when finished (or abandon if needed).
+5. **Rewards:** completing sessions earns XP and bricks (and related resources by difficulty).
+6. **Build Mode:** spend earned resources to progress your home (walls, stack building, etc.).
+7. **My Home:** decorate and customize your FocusHome layout.
+8. **History / archive:** view past activity and completed homes where available.
+9. **Cloud sync (optional):** Settings → create account or **Sign in** → your tasks, inventory, and home sync to Supabase Postgres.
+10. **Sync local progress:** if you played locally first, sign in → Settings → **Sync local progress** to upload anonymous local data to your account once.
+11. **Language:** switch between **English** and **Turkish** in Settings.
+
+---
+
+## Main features
+
+- **Local mode without account** — full gameplay on this device via browser storage
+- **Supabase email/password auth** — optional sign-up and sign-in
+- **Cloud sync for signed-in users** — tasks, inventory, grid, and home state in Postgres
+- **Local-to-cloud progress sync** — one-click migration after sign-in
+- **Manual focus session creation** — preset durations (15 / 30 / 45 / 60 min), difficulty, optional calendar link
+- **Gemini AI task parsing** — natural language → structured session (`gemini-2.5-flash-lite`)
+- **Smart Parse fallback** — deterministic heuristic parsing if AI is unavailable, times out, or hits quota
+- **Focus timer and completion rewards** — XP, bricks, level progression
+- **Build Mode / home progression** — stack building and tier progress
+- **My Home decoration editor** — place and manage decorations
+- **History and archive** — activity history and completed homes
+- **English / Turkish** — full UI language support
+- **Account deletion** — remove cloud data and Supabase auth user (Settings)
 
 ---
 
@@ -10,61 +60,12 @@ FocusHome is an AI-assisted focus planning app. Users describe what they want to
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | React 18, Vite 5, mobile-first CSS |
-| Backend | FastAPI, Uvicorn, PyJWT, psycopg3 |
-| Auth | Supabase Auth (email/password, JWT) |
+| Frontend | React + Vite |
+| Backend | FastAPI (Uvicorn) |
+| Auth | Supabase Auth (JWT) |
 | Database | Supabase Postgres (cloud); localStorage (local mode) |
-| AI parsing | Google Gemini (`gemini-2.5-flash-lite`) with Smart Parse fallback |
-| Calendar | Google Calendar template URLs (no OAuth) |
-
----
-
-## Features
-
-- **Manual task creation** — title, duration (15/30/45/60 min), difficulty, optional calendar link
-- **AI task parsing** — natural language → structured session (Gemini or Smart Parse fallback)
-- **Focus timer** — start, complete, abandon; rewards on completion
-- **Inventory & XP** — bricks, glass, roof tiles; level from XP
-- **5×5 home grid** — place walls, windows, roof tiles
-- **Build mode** — stack progress, decorations, completed homes archive
-- **Google Calendar** — optional template link per task
-- **Account sync** — sign in to persist tasks/inventory/grid across devices
-- **Local progress migration** — one-click upload of anonymous local data after sign-in
-- **Account deletion** — removes cloud data and Supabase auth user
-- **i18n** — English and Turkish
-
----
-
-## Local mode vs cloud sync
-
-### Local mode (default, no sign-in)
-
-- All game state lives in **browser localStorage** on this device.
-- No Supabase or backend auth required for core gameplay.
-- AI parse still calls the backend if `VITE_API_BASE_URL` is set (public endpoint); otherwise client-side Smart Parse fallback.
-- Ideal for demos, offline use, and users who do not want an account.
-
-### Cloud sync (optional, after sign-in)
-
-- User signs in via **Supabase Auth** on the frontend.
-- Frontend sends `Authorization: Bearer <access_token>` on protected API calls.
-- Backend verifies JWT and stores data in **Supabase Postgres** via `DATABASE_URL`.
-- Tables: `user_profiles`, `tasks`, `inventories`, `active_homes`, `completed_homes`, `preferences`, `activity_events`.
-- **Sync local progress** (Settings) uploads anonymous local data to the signed-in account once.
-
-Without `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, the app stays in local-only mode.
-
----
-
-## Gemini AI parse + Smart Parse fallback
-
-1. User enters natural language on the create-task screen.
-2. Frontend calls `POST /api/ai/parse-task` (no auth required).
-3. Backend tries **Gemini** when `GEMINI_API_KEY` is set (`AI_PROVIDER=gemini`, model **`gemini-2.5-flash-lite`**).
-4. If the key is missing, the request times out, or quota is exceeded (HTTP 429), the backend uses a **deterministic Smart Parse** (heuristic) — same UX, badge shows **Smart Parse** instead of **AI**.
-5. Parsed output is a **suggestion only**; the user confirms/edits before `POST /api/tasks/from-ai` saves it.
-
-Never put API keys in frontend code. Keys live in `backend/.env` only.
+| AI | Google Gemini API + Smart Parse fallback |
+| Hosting | **Vercel** (frontend), **Render** (backend) |
 
 ---
 
@@ -72,11 +73,11 @@ Never put API keys in frontend code. Keys live in `backend/.env` only.
 
 ### Prerequisites
 
-- Python 3.11+ (3.12+ recommended)
+- Python 3.11+
 - Node.js 18+
 - Optional: Supabase project, Gemini API key
 
-### 1. Backend
+### Backend
 
 ```powershell
 cd backend
@@ -84,129 +85,131 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 copy .env.example .env
+```
+
+Fill in `backend/.env` (see [Environment variables](#environment-variables)), then:
+
+```powershell
+python scripts/init_db.py
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 - API: http://127.0.0.1:8000  
 - Swagger: http://127.0.0.1:8000/docs  
 
-### 2. Frontend
+### Frontend
 
 ```powershell
 cd frontend
 npm install
 copy .env.example .env
+```
+
+Fill in `frontend/.env`, then:
+
+```powershell
 npm run dev
 ```
 
 - UI: http://127.0.0.1:5173  
 
-**Start the backend first**, then the frontend. Restart both after changing any `.env` file.
+**Start the backend first**, then the frontend.
 
 ---
 
-## Environment setup
+## Environment variables
 
-Copy the example files and fill in values. **Never commit `.env` files or real secrets.**
+Copy `*.env.example` → `.env` in each folder. **Commit `.env.example` files only — never commit real `.env` files or secrets.**
 
-| File | Purpose |
-|------|---------|
-| `backend/.env.example` → `backend/.env` | Auth, Postgres, Gemini, CORS |
-| `frontend/.env.example` → `frontend/.env` | Backend URL, Supabase anon key |
+| Rule | Detail |
+|------|--------|
+| Frontend secrets | **Never** put service role key, `DATABASE_URL`, JWT secret, or Gemini API key in frontend |
+| Backend env changes | Restart the backend (`uvicorn`) after editing `backend/.env` |
+| Frontend env changes | Rebuild or redeploy Vite (`npm run build` / Vercel redeploy) after changing `VITE_*` vars |
 
-See [`backend/.env.example`](backend/.env.example) and [`frontend/.env.example`](frontend/.env.example) for every variable. Details: [`backend/README.md`](backend/README.md).
+### Frontend (`frontend/.env`)
 
-### Minimum for local-only demo
+| Variable | Purpose |
+|----------|---------|
+| `VITE_API_BASE_URL` | Backend URL — local: `http://127.0.0.1:8000`; production: `https://focushome-backend.onrender.com` |
+| `VITE_SUPABASE_URL` | Supabase project URL (anon/public — from Supabase dashboard) |
+| `VITE_SUPABASE_ANON_KEY` | Supabase **anon public** key only |
 
-- **Backend:** empty or partial `.env` — JSON file persistence, Smart Parse for AI.
-- **Frontend:** `VITE_API_BASE_URL=http://127.0.0.1:8000`
+### Backend (`backend/.env`)
 
-### Full cloud + AI stack
+| Variable | Purpose |
+|----------|---------|
+| `APP_ENV` | `development` or `production` |
+| `AUTH_MODE` | `supabase` for production (JWT required on protected routes) |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only admin key (account deletion) — **never frontend** |
+| `SUPABASE_JWT_SECRET` | JWT secret from Supabase API settings |
+| `DATABASE_URL` | Supabase Postgres connection string (Session pooler recommended) |
+| `AI_PROVIDER` | `gemini` (default) |
+| `GEMINI_API_KEY` | Google Gemini API key (optional — Smart Parse if missing) |
+| `GEMINI_MODEL` | Default **`gemini-2.5-flash-lite`** |
+| `CORS_ORIGINS` | Comma-separated allowed origins — must include Vercel URL in production |
 
-- **Backend:** `AUTH_MODE=supabase`, Supabase URL/keys, `DATABASE_URL`, optional `GEMINI_API_KEY`
-- **Frontend:** `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+See [`backend/.env.example`](backend/.env.example) and [`frontend/.env.example`](frontend/.env.example) for templates.
 
----
-
-## Database init (Supabase Postgres)
+### Database init
 
 Required for signed-in cloud persistence:
 
-1. Create a Supabase project → **Project Settings → Database** → copy the **Session pooler** URI.
-2. Set `DATABASE_URL` in `backend/.env` (include `?sslmode=require` if missing).
-3. Run once from `backend/`:
-
 ```bash
+cd backend
 python scripts/init_db.py
 ```
 
-4. Confirm tables in Supabase **Table Editor**.
+Creates tables in Supabase Postgres (`user_profiles`, `tasks`, `inventories`, `active_homes`, `completed_homes`, `preferences`, `activity_events`).
 
 ---
 
-## Test and build commands
-
-### Backend tests
+## Test and build
 
 ```powershell
+# Backend tests
 cd backend
 python -m pytest tests/ -q
-```
 
-### Frontend production build
-
-```powershell
+# Frontend production build
 cd frontend
 npm run build
 ```
 
-Output: `frontend/dist/` (static files for Vercel).
-
-### Optional: Gemini env check (does not print keys)
-
-```powershell
-cd backend
-python scripts/test_gemini_env.py
-```
-
 ---
 
-## Deployment
+## Deployment notes
 
-Full step-by-step guide: **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)**
-
-Summary:
-
-| Service | Platform | Notes |
-|---------|----------|-------|
-| Frontend | **Vercel** | Build: `npm run build`, output: `dist`. Set `VITE_*` env vars at build time. |
-| Backend | **Render** | Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`. Set all backend env vars in Render dashboard. |
+| Component | Platform | Notes |
+|-----------|----------|-------|
+| Frontend | **Vercel** | Build: `npm run build`, output: `dist`. Env: **`VITE_*` only** (public values). |
+| Backend | **Render** | Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`. All secrets in Render env. |
 | Auth + DB | **Supabase** | Same project for Auth, JWT secret, service role, and `DATABASE_URL`. |
 
-**Critical after deploy:**
+**Production checklist:**
 
-1. Set `VITE_API_BASE_URL` on Vercel to your Render backend URL (e.g. `https://focushome-api.onrender.com`).
-2. Add your Vercel URL to backend `CORS_ORIGINS` (comma-separated).
-3. Run `python scripts/init_db.py` against production `DATABASE_URL` once.
-4. Set `APP_ENV=production` and `AUTH_MODE=supabase` on Render.
+1. **Render** — set `APP_ENV=production`, `AUTH_MODE=supabase`, Supabase keys, `DATABASE_URL`, `GEMINI_*`, `CORS_ORIGINS`.
+2. **Vercel** — set `VITE_API_BASE_URL=https://focushome-backend.onrender.com`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`; redeploy after changes.
+3. **CORS** — `CORS_ORIGINS` on Render must include `https://future-talent-modul301-focus-home.vercel.app` (no trailing slash).
+4. **Supabase Auth** — Site URL / redirect URLs should include the Vercel domain and `http://localhost:5173` for local dev.
+5. Run `python scripts/init_db.py` once against production `DATABASE_URL`.
+
+Full guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
 
 ---
 
-## Manual test checklist (pre-submission)
+## Troubleshooting
 
-Use this before demo or deploy:
-
-- [ ] **Local mode:** open app signed out → create manual task → complete → earn bricks → place grid tile
-- [ ] **Smart Parse:** create task with AI text, no Gemini key → badge shows Smart Parse → confirm saves task
-- [ ] **Gemini:** with `GEMINI_API_KEY` → parse returns AI source → confirm saves task
-- [ ] **Sign up / sign in:** Supabase auth works; Settings shows signed-in email
-- [ ] **Cloud tasks:** signed in → create task → row appears in Supabase `tasks` table
-- [ ] **Cloud load:** refresh page → tasks/inventory/grid load from backend
-- [ ] **Sync local progress:** with local data → sign in → Sync → data appears in Postgres
-- [ ] **Cross-device:** incognito + same account → same tasks load
-- [ ] **Account deletion:** Settings → Delete account → user data removed
-- [ ] **Health:** `GET /health` returns 200 on deployed backend
-- [ ] **Build/tests:** `npm run build` and `pytest` pass
+| Problem | What to do |
+|---------|------------|
+| Live app calls `localhost` | `VITE_API_BASE_URL` is wrong on Vercel — fix and **redeploy** frontend |
+| Browser CORS error | Add exact Vercel origin to Render `CORS_ORIGINS` — **redeploy** backend |
+| AI badge shows **Smart Parse** | Gemini may be unavailable, quota exceeded, or key missing — app still works via fallback |
+| Gemini model **404** | Set `GEMINI_MODEL=gemini-2.5-flash-lite` on Render and restart |
+| Supabase tables empty | Run `python scripts/init_db.py` with correct `DATABASE_URL` |
+| Auth fails (ES256 / JWKS) | Ensure `cryptography` is installed (`pip install -r requirements.txt`) and `SUPABASE_JWT_SECRET` + `SUPABASE_URL` match your project |
+| First live request very slow | Render free tier cold start — wait and retry |
 
 ---
 
@@ -216,8 +219,8 @@ Use this before demo or deploy:
 FocusHome/
 ├── backend/          FastAPI API, services, Postgres repositories
 ├── frontend/         React/Vite UI
-├── docs/             PRD, MVP, deployment guide, screenshots
-└── README.md         This file
+├── docs/             PRD, deployment guide, screenshots
+└── README.md
 ```
 
 ---
@@ -226,24 +229,29 @@ FocusHome/
 
 | Doc | Description |
 |-----|-------------|
-| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Render + Vercel + Supabase deployment |
-| [`backend/README.md`](backend/README.md) | API endpoints, env vars, curl examples |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Render + Vercel + Supabase setup |
+| [`backend/README.md`](backend/README.md) | API endpoints, curl examples |
 | [`docs/focushome_prd.md`](docs/focushome_prd.md) | Product requirements |
 | [`docs/focushome_mvp.md`](docs/focushome_mvp.md) | MVP scope |
-| [`docs/screenshots/`](docs/screenshots/) | Screenshot placeholders |
 
 ---
 
-## Optional future work (out of scope)
+## Final status
 
-These are **not** required for the current submission:
+**Working in production and locally:**
 
-- **Play Store / PWA** — installable mobile app wrapper
-- **Custom SMTP** — production email delivery (Supabase built-in email has rate limits)
-- **Advanced analytics** — usage dashboards, A/B testing
+- Local mode, Supabase auth, Postgres cloud sync, Gemini AI parse, Smart Parse fallback
+- Backend tests and frontend build pass
+
+### Optional future work (out of scope)
+
+- **PWA / mobile app / Play Store** — installable native-style experience
+- **Custom SMTP** — reliable production email (Supabase built-in email has rate limits)
+- **More decoration assets** — expanded catalog and themes
+- **Analytics and notifications** — usage insights and reminder push
 
 ---
 
 ## Screenshots
 
-Add demo screenshots under `docs/screenshots/` (see `docs/screenshots/README.md`).
+Demo screenshots: [`docs/screenshots/`](docs/screenshots/)

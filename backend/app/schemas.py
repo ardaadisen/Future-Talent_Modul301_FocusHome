@@ -26,6 +26,13 @@ class TaskSource(str, Enum):
     AI = "AI"
 
 
+class ParseSource(str, Enum):
+    GEMINI = "gemini"
+    OPENAI = "openai"
+    HEURISTIC = "heuristic"
+    MOCK = "mock"
+
+
 class PresetDuration(int, Enum):
     M15 = 15
     M30 = 30
@@ -45,12 +52,18 @@ class AIParsedTaskObject(BaseModel):
     title: str
     startDateTime: datetime
     endDateTime: datetime
-    durationMinutes: int
+    durationSeconds: int = Field(..., ge=60)
+    durationMinutes: int = Field(..., ge=1)
     difficulty: Difficulty
     description: str
     confidence: float = Field(..., ge=0.0, le=1.0)
     calendarEligible: bool
     calendarUrl: Optional[str] = None
+    source: ParseSource
+    fallbackReason: Optional[str] = Field(
+        default=None,
+        description="Internal code when source=heuristic after an AI provider was skipped (e.g. gemini_quota_exceeded).",
+    )
 
 
 # --- Tasks ---
@@ -193,6 +206,9 @@ class MainApiResponse(BaseModel):
     app: str
     version: str
     message: str
+    authMode: str = "mock"
+    cloudDbConfigured: bool = False
+    userSyncAvailable: bool = True
 
 
 def task_from_state(data: dict[str, Any]) -> TaskObject:

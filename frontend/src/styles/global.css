@@ -206,6 +206,19 @@ body {
   letter-spacing: 0.06em;
 }
 
+.app-banner {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: #f5efe6;
+  border: 1px solid #e0d4c3;
+}
+
+.app-banner-error {
+  background: #fdf3f2;
+  border-color: #e8c4c0;
+}
+
 @media (min-width: 820px) {
   .page-grid {
     grid-template-columns: 1.2fr 1fr;

@@ -1,10 +1,13 @@
-import AppCard from "./AppCard";
 
-export default function StatCard({ label, value }) {
+
+export function StatCard({ icon, label, value }) {
   return (
-    <AppCard>
-      <div className="muted" style={{ fontSize: "0.8rem" }}>{label}</div>
-      <strong style={{ fontSize: "1.1rem" }}>{value}</strong>
-    </AppCard>
+    <article className="card stat-card">
+      <div className="stat-icon">{icon}</div>
+      <div>
+        <p className="muted">{label}</p>
+        <strong>{value}</strong>
+      </div>
+    </article>
   );
 }

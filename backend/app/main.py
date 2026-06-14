@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.errors import AppError
-from app.routers import ai, calendar, grid, health, inventory, tasks
+from app.routers import account, ai, auth, calendar, grid, health, inventory, tasks, user
 
 
 def _cors_origins() -> list[str]:
@@ -32,11 +32,14 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router)
+    app.include_router(auth.router)
+    app.include_router(account.router)
     app.include_router(ai.router)
     app.include_router(tasks.router)
     app.include_router(inventory.router)
     app.include_router(calendar.router)
     app.include_router(grid.router)
+    app.include_router(user.router)
 
     return app
 

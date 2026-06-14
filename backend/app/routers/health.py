@@ -1,5 +1,7 @@
 from fastapi import APIRouter
 
+from app.config import auth_mode
+from app.database import is_cloud_db_configured
 from app.schemas import HealthResponse, MainApiResponse, MessageResponse
 
 router = APIRouter(tags=["meta"])
@@ -21,4 +23,7 @@ def api_main() -> MainApiResponse:
         app="FocusHome",
         version="0.1.0",
         message="FocusHome backend is running.",
+        authMode=auth_mode(),
+        cloudDbConfigured=is_cloud_db_configured(),
+        userSyncAvailable=True,
     )

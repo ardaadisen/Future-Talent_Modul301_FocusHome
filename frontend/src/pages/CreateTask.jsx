@@ -2,19 +2,21 @@ import { useState } from "react";
 import AppButton from "../components/AppButton";
 import AppCard from "../components/AppCard";
 import SectionHeader from "../components/SectionHeader";
+import { useLanguage } from "../context/LanguageContext.jsx";
+import { difficultyLabel } from "../i18n/labels.js";
 import {
-  BACKEND_UNAVAILABLE,
+  createFromAiTask,
   createManualTask,
   mapAiParseToUiTask,
-  mapManualTaskResponseToUi,
+  mapTaskResponseToUi,
+  mapUiTaskToFromAiPayload,
   nearestPresetDurationMinutes,
   parseTask,
 } from "../services/api";
 
-export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
-  const [nlInput, setNlInput] = useState(
-    "Tomorrow at 3 PM I will study algorithms for 45 minutes.",
-  );
+export default function CreateTask({ onTaskCreated }) {
+  const { t } = useLanguage();
+  const [nlInput, setNlInput] = useState(t("scaffold.defaultPlanExample"));
   const [parsedTask, setParsedTask] = useState(null);
   const [parseError, setParseError] = useState(null);
   const [parseLoading, setParseLoading] = useState(false);
@@ -33,6 +35,8 @@ export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
   const [editTask, setEditTask] = useState(null);
   const [manualError, setManualError] = useState(null);
   const [manualSaving, setManualSaving] = useState(false);
+  const [aiConfirmLoading, setAiConfirmLoading] = useState(false);
+  const [aiConfirmError, setAiConfirmError] = useState(null);
 
   const parseWithAi = async () => {
     setParseError(null);
@@ -41,8 +45,8 @@ export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
       const data = await parseTask(nlInput, "Europe/Istanbul");
       setParsedTask(mapAiParseToUiTask(data));
       setEditTask(null);
-    } catch {
-      setParseError(BACKEND_UNAVAILABLE);
+    } catch (err) {
+      setParseError(err.message || t("error.connectFailed"));
       setParsedTask(null);
       setEditTask(null);
     } finally {
@@ -53,6 +57,21 @@ export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
   const startEditParsed = () => {
     if (parsedTask) {
       setEditTask({ ...parsedTask });
+    }
+  };
+
+  const confirmAiTask = async (task) => {
+    setAiConfirmError(null);
+    setAiConfirmLoading(true);
+    try {
+      const created = await createFromAiTask(mapUiTaskToFromAiPayload(task));
+      onTaskCreated(mapTaskResponseToUi(created));
+      setParsedTask(null);
+      setEditTask(null);
+    } catch (err) {
+      setAiConfirmError(err.message || t("error.connectFailed"));
+    } finally {
+      setAiConfirmLoading(false);
     }
   };
 
@@ -75,7 +94,7 @@ export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
   const saveManualTask = async () => {
     setManualError(null);
     setManualSaving(true);
-    const title = manualTask.title?.trim() || "Untitled Manual Task";
+    const title = manualTask.title?.trim() || t("scaffold.untitledManualTask");
     const preset = nearestPresetDurationMinutes(manualTask.durationMinutes);
     try {
       const created = await createManualTask({
@@ -84,9 +103,9 @@ export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
         difficulty_level: manualTask.difficulty,
         description: manualTask.description?.trim() || undefined,
       });
-      onCreateManual(mapManualTaskResponseToUi(created));
-    } catch {
-      setManualError(BACKEND_UNAVAILABLE);
+      onTaskCreated(mapTaskResponseToUi(created));
+    } catch (err) {
+      setManualError(err.message || t("error.connectFailed"));
     } finally {
       setManualSaving(false);
     }
@@ -96,52 +115,57 @@ export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
     <div className="page-grid">
       <div>
         <SectionHeader
-          title="AI-Assisted Task Creation"
-          subtitle="Parse runs on the FastAPI backend (see README for URL and env)."
+          title={t("scaffold.aiTaskCreation")}
+          subtitle={t("scaffold.aiTaskCreationLead")}
         />
-        <AppCard title="Natural Language Input">
+        <AppCard title={t("scaffold.naturalLanguageInput")}>
           <div className="field">
-            <label htmlFor="nl-input">Write your plan</label>
+            <label htmlFor="nl-input">{t("scaffold.writeYourPlan")}</label>
             <textarea
               id="nl-input"
               className="textarea"
               value={nlInput}
               onChange={(e) => setNlInput(e.target.value)}
-              placeholder="Tomorrow at 3 PM I will study algorithms for 45 minutes."
+              placeholder={t("scaffold.defaultPlanExample")}
             />
           </div>
           {parseError ? <p className="text-danger">{parseError}</p> : null}
           <AppButton onClick={parseWithAi} disabled={parseLoading}>
-            {parseLoading ? "Parsing…" : "Parse with AI"}
+            {parseLoading ? t("scaffold.parsing") : t("scaffold.parseWithAi")}
           </AppButton>
         </AppCard>
 
         {parsedTask ? (
-          <AppCard title="Parsed task (from backend)">
-            <p><strong>Title:</strong> {parsedTask.title}</p>
-            <p><strong>Start:</strong> {parsedTask.startTime}</p>
-            <p><strong>End:</strong> {parsedTask.endTime}</p>
-            <p><strong>Duration:</strong> {parsedTask.durationMinutes} min</p>
-            <p><strong>Difficulty:</strong> {parsedTask.difficulty}</p>
-            <p><strong>Description:</strong> {parsedTask.description}</p>
+          <AppCard title={t("scaffold.parsedTask")}>
+            <p><strong>{t("scaffold.fieldTitle")}:</strong> {parsedTask.title}</p>
+            <p><strong>{t("scaffold.fieldStart")}:</strong> {parsedTask.startTime}</p>
+            <p><strong>{t("scaffold.fieldEnd")}:</strong> {parsedTask.endTime}</p>
+            <p><strong>{t("scaffold.fieldDurationMin")}:</strong> {parsedTask.durationMinutes} min</p>
+            <p><strong>{t("common.difficulty")}:</strong> {difficultyLabel(t, parsedTask.difficulty)}</p>
+            <p><strong>{t("common.description")}:</strong> {parsedTask.description}</p>
             {parsedTask.calendarUrl ? (
               <p className="field">
                 <a href={parsedTask.calendarUrl} target="_blank" rel="noreferrer">
-                  Open Google Calendar template link
+                  {t("scaffold.openCalendarLink")}
                 </a>
               </p>
             ) : null}
+            {aiConfirmError ? <p className="text-danger">{aiConfirmError}</p> : null}
             <div className="row">
-              <AppButton variant="secondary" onClick={startEditParsed}>Edit Before Confirm</AppButton>
-              <AppButton onClick={() => onConfirmAiTask(parsedTask)}>Confirm</AppButton>
+              <AppButton variant="secondary" onClick={startEditParsed} disabled={aiConfirmLoading}>
+                {t("scaffold.editBeforeConfirm")}
+              </AppButton>
+              <AppButton onClick={() => confirmAiTask(parsedTask)} disabled={aiConfirmLoading}>
+                {aiConfirmLoading ? t("common.saving") : t("scaffold.confirm")}
+              </AppButton>
             </div>
           </AppCard>
         ) : null}
 
         {editTask ? (
-          <AppCard title="Task Confirmation / Edit">
+          <AppCard title={t("scaffold.taskConfirmation")}>
             <div className="field">
-              <label>Title</label>
+              <label>{t("scaffold.fieldTitle")}</label>
               <input
                 className="input"
                 value={editTask.title}
@@ -149,7 +173,7 @@ export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
               />
             </div>
             <div className="field">
-              <label>Duration</label>
+              <label>{t("common.duration")}</label>
               <select
                 className="select"
                 value={editTask.durationMinutes}
@@ -163,34 +187,39 @@ export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
               >
                 {[15, 30, 45, 60].map((minutes) => (
                   <option key={minutes} value={minutes}>
-                    {minutes} minutes
+                    {t("scaffold.minutesOption", { minutes })}
                   </option>
                 ))}
               </select>
             </div>
             <div className="field">
-              <label>Difficulty</label>
+              <label>{t("common.difficulty")}</label>
               <select
                 className="select"
                 value={editTask.difficulty}
                 onChange={(e) => setEditTask((prev) => ({ ...prev, difficulty: e.target.value }))}
               >
                 {["EASY", "MEDIUM", "HARD"].map((d) => (
-                  <option key={d} value={d}>{d}</option>
+                  <option key={d} value={d}>{difficultyLabel(t, d)}</option>
                 ))}
               </select>
             </div>
             <div className="field">
-              <label>Description</label>
+              <label>{t("common.description")}</label>
               <textarea
                 className="textarea"
                 value={editTask.description}
                 onChange={(e) => setEditTask((prev) => ({ ...prev, description: e.target.value }))}
               />
             </div>
+            {aiConfirmError ? <p className="text-danger">{aiConfirmError}</p> : null}
             <div className="row">
-              <AppButton onClick={() => onConfirmAiTask(editTask)}>Confirm</AppButton>
-              <AppButton variant="danger" onClick={() => setEditTask(null)}>Cancel</AppButton>
+              <AppButton onClick={() => confirmAiTask(editTask)} disabled={aiConfirmLoading}>
+                {aiConfirmLoading ? t("common.saving") : t("scaffold.confirm")}
+              </AppButton>
+              <AppButton variant="danger" onClick={() => setEditTask(null)} disabled={aiConfirmLoading}>
+                {t("common.cancel")}
+              </AppButton>
             </div>
           </AppCard>
         ) : null}
@@ -198,12 +227,12 @@ export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
 
       <div>
         <SectionHeader
-          title="Manual Task Creation"
-          subtitle="Saves to the backend (POST /api/tasks/manual). Duration is rounded to 15 / 30 / 45 / 60 minutes."
+          title={t("scaffold.manualTaskCreation")}
+          subtitle={t("scaffold.manualTaskCreationLead")}
         />
-        <AppCard title="Create Manual Task">
+        <AppCard title={t("scaffold.createManualTask")}>
           <div className="field">
-            <label>Title</label>
+            <label>{t("scaffold.fieldTitle")}</label>
             <input
               className="input"
               value={manualTask.title}
@@ -211,7 +240,7 @@ export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
             />
           </div>
           <div className="field">
-            <label>Duration (hour / minute / second)</label>
+            <label>{t("scaffold.durationHms")}</label>
             <div className="row">
               <input
                 className="input"
@@ -219,7 +248,7 @@ export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
                 min="0"
                 value={manualDuration.hours}
                 onChange={(e) => updateManualDuration("hours", e.target.value)}
-                placeholder="Hour"
+                placeholder={t("scaffold.placeholderHour")}
               />
               <input
                 className="input"
@@ -227,7 +256,7 @@ export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
                 min="0"
                 value={manualDuration.minutes}
                 onChange={(e) => updateManualDuration("minutes", e.target.value)}
-                placeholder="Minute"
+                placeholder={t("scaffold.placeholderMinute")}
               />
               <input
                 className="input"
@@ -235,28 +264,31 @@ export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
                 min="0"
                 value={manualDuration.seconds}
                 onChange={(e) => updateManualDuration("seconds", e.target.value)}
-                placeholder="Second"
+                placeholder={t("scaffold.placeholderSecond")}
               />
             </div>
             <small className="muted">
-              Total: {manualTask.durationSeconds} seconds ({manualTask.durationMinutes} minute view) — saved as{" "}
-              {nearestPresetDurationMinutes(manualTask.durationMinutes)} min preset
+              {t("scaffold.totalDurationPreview", {
+                seconds: manualTask.durationSeconds,
+                minutes: manualTask.durationMinutes,
+                preset: nearestPresetDurationMinutes(manualTask.durationMinutes),
+              })}
             </small>
           </div>
           <div className="field">
-            <label>Difficulty</label>
+            <label>{t("common.difficulty")}</label>
             <select
               className="select"
               value={manualTask.difficulty}
               onChange={(e) => setManualTask((prev) => ({ ...prev, difficulty: e.target.value }))}
             >
               {["EASY", "MEDIUM", "HARD"].map((d) => (
-                <option key={d} value={d}>{d}</option>
+                <option key={d} value={d}>{difficultyLabel(t, d)}</option>
               ))}
             </select>
           </div>
           <div className="field">
-            <label>Description</label>
+            <label>{t("common.description")}</label>
             <textarea
               className="textarea"
               value={manualTask.description}
@@ -265,7 +297,7 @@ export default function CreateTask({ onCreateManual, onConfirmAiTask }) {
           </div>
           {manualError ? <p className="text-danger">{manualError}</p> : null}
           <AppButton onClick={saveManualTask} disabled={manualSaving}>
-            {manualSaving ? "Saving…" : "Save Manual Task"}
+            {manualSaving ? t("common.saving") : t("scaffold.saveManualTask")}
           </AppButton>
         </AppCard>
       </div>

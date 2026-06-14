@@ -9,6 +9,14 @@ Thumbs.db
 .env.*
 !.env.example
 
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
 # Python / backend
 backend/data/
 __pycache__/
@@ -43,14 +51,8 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 
-# Local env files inside subfolders
-backend/.env
-frontend/.env
-frontend/.env.*
-!frontend/.env.example
-
 # Cursor local files
 .cursor/
 
-# Local project status notes (not pushed to remote)
+# Local project status notes
 project-status.local.md

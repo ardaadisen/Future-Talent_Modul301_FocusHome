@@ -1,198 +1,117 @@
-import { useEffect, useMemo, useState } from "react";
-import AppButton from "./components/AppButton";
-import Dashboard from "./pages/Dashboard";
-import CreateTask from "./pages/CreateTask";
-import FocusTimer from "./pages/FocusTimer";
-import HomeBuilder from "./pages/HomeBuilder";
-import { initialGrid, initialInventory, initialTodayTasks } from "./data/mockData";
-import { BACKEND_UNAVAILABLE, fetchHealth, getApiBaseUrl } from "./services/api";
-import { createGoogleCalendarTemplateUrl } from "./utils/calendar";
-import { calcLevel, getRewardForDifficulty } from "./utils/rewards";
+import { useEffect, useState } from "react";
 
-export default function App() {
-  const [backendHealth, setBackendHealth] = useState({ state: "loading" });
-  const [activePage, setActivePage] = useState("dashboard");
-  const [tasks, setTasks] = useState(initialTodayTasks);
-  const [inventory, setInventory] = useState(initialInventory);
-  const [grid, setGrid] = useState(initialGrid);
-  const [selectedTask, setSelectedTask] = useState(initialTodayTasks[0]);
-  const [remainingSeconds, setRemainingSeconds] = useState(initialTodayTasks[0].durationMinutes * 60);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [sessionMessage, setSessionMessage] = useState("");
+import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
+import { LanguageProvider, useLanguage } from "./context/LanguageContext.jsx";
+import { AppErrorBoundary } from "./components/AppErrorBoundary.jsx";
+import { LocalModeBanner } from "./components/LocalModeBanner.jsx";
+import { Layout } from "./components/Layout.jsx";
+import { PageErrorBoundary } from "./components/PageErrorBoundary.jsx";
+import { useAppData } from "./hooks/useAppData.js";
+import { BuildModePage } from "./pages/BuildModePage.jsx";
+import { DashboardPage } from "./pages/DashboardPage.jsx";
+import { HistoryPage } from "./pages/HistoryPage.jsx";
+import { HomesArchivePage } from "./pages/HomesArchivePage.jsx";
+import { MyHomePage } from "./pages/MyHomePage.jsx";
+import { SettingsPage } from "./pages/SettingsPage.jsx";
 
+function LanguageSync({ language }) {
+  const { setLanguage } = useLanguage();
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await fetchHealth();
-        if (cancelled) {
-          return;
-        }
-        setBackendHealth({
-          state: "ok",
-          service: data.service,
-          baseUrl: getApiBaseUrl(),
-        });
-      } catch {
-        if (!cancelled) {
-          setBackendHealth({ state: "error", message: BACKEND_UNAVAILABLE });
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (language) setLanguage(language);
+  }, [language, setLanguage]);
+  return null;
+}
 
-  useEffect(() => {
-    if (!timerRunning || remainingSeconds <= 0) {
-      return undefined;
-    }
-    const id = setInterval(() => {
-      setRemainingSeconds((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [timerRunning, remainingSeconds]);
-
-  useEffect(() => {
-    if (remainingSeconds === 0 && timerRunning) {
-      setTimerRunning(false);
-      setSessionMessage("Timer finished. You can now claim reward.");
-    }
-  }, [remainingSeconds, timerRunning]);
-
-  const calendarUrl = useMemo(() => createGoogleCalendarTemplateUrl(selectedTask || {}), [selectedTask]);
-
-  const selectTask = (task) => {
-    setSelectedTask(task);
-    setRemainingSeconds(task.durationSeconds ?? task.durationMinutes * 60);
-    setTimerRunning(false);
-    setSessionMessage("");
-    setActivePage("timer");
-  };
-
-  const addTask = (task, source = "MANUAL") => {
-    const newTask = {
-      id: task.id || crypto.randomUUID(),
-      status: task.status || "PENDING",
-      startTime: "2026-05-07T15:00:00+03:00",
-      endTime: "2026-05-07T16:00:00+03:00",
-      ...task,
-      source,
-    };
-    setTasks((prev) => [newTask, ...prev]);
-    setSelectedTask(newTask);
-    setRemainingSeconds(newTask.durationSeconds ?? newTask.durationMinutes * 60);
-    setTimerRunning(false);
-    setSessionMessage("");
-  };
-
-  const completeFocus = () => {
-    if (!selectedTask || remainingSeconds > 0) {
-      return;
-    }
-    const reward = getRewardForDifficulty(selectedTask.difficulty);
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === selectedTask.id ? { ...task, status: "COMPLETED" } : task,
-      ),
-    );
-    setInventory((prev) => {
-      const nextXp = prev.xp + reward.xp;
-      return {
-        ...prev,
-        xp: nextXp,
-        level: calcLevel(nextXp),
-        bricks: prev.bricks + reward.bricks,
-      };
-    });
-    setTimerRunning(false);
-    setSessionMessage("Task completed! Reward earned.");
-  };
-
-  const cancelFocus = () => {
-    if (!selectedTask) {
-      return;
-    }
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === selectedTask.id ? { ...task, status: "ABANDONED" } : task,
-      ),
-    );
-    setTimerRunning(false);
-    setSessionMessage("Session cancelled. No reward earned.");
-  };
-
-  const placeMockAsset = (rowIndex, colIndex) => {
-    setGrid((prev) =>
-      prev.map((row, rIdx) =>
-        row.map((cell, cIdx) => {
-          if (rIdx !== rowIndex || cIdx !== colIndex) {
-            return cell;
-          }
-          if (cell !== "empty") {
-            return cell;
-          }
-          return "wall";
-        }),
-      ),
-    );
-  };
+function DevToolsPanel({ appData }) {
+  const { t } = useLanguage();
 
   return (
-    <main className="app-shell">
-      <nav className="top-nav">
-        <AppButton variant={activePage === "dashboard" ? "primary" : "secondary"} onClick={() => setActivePage("dashboard")}>
-          Dashboard
-        </AppButton>
-        <AppButton variant={activePage === "create" ? "primary" : "secondary"} onClick={() => setActivePage("create")}>
-          Create Task
-        </AppButton>
-        <AppButton variant={activePage === "timer" ? "primary" : "secondary"} onClick={() => setActivePage("timer")}>
-          Focus Timer
-        </AppButton>
-        <AppButton variant={activePage === "builder" ? "primary" : "secondary"} onClick={() => setActivePage("builder")}>
-          Home Builder
-        </AppButton>
-      </nav>
-
-      {activePage === "dashboard" ? (
-        <Dashboard
-          inventory={inventory}
-          tasks={tasks}
-          backendHealth={backendHealth}
-          onGotoCreate={() => setActivePage("create")}
-          onGotoTimer={() => setActivePage("timer")}
-          onSelectTask={selectTask}
-        />
-      ) : null}
-
-      {activePage === "create" ? (
-        <CreateTask
-          onCreateManual={(task) => addTask(task, "MANUAL")}
-          onConfirmAiTask={(task) => addTask(task, "AI")}
-        />
-      ) : null}
-
-      {activePage === "timer" ? (
-        <FocusTimer
-          selectedTask={selectedTask}
-          remainingSeconds={remainingSeconds}
-          running={timerRunning}
-          sessionMessage={sessionMessage}
-          onStart={() => {
-            setTimerRunning(true);
-            setSessionMessage("");
-          }}
-          onPause={() => setTimerRunning(false)}
-          onComplete={completeFocus}
-          onCancel={cancelFocus}
-        />
-      ) : null}
-
-      {activePage === "builder" ? (
-        <HomeBuilder grid={grid} onPlaceAsset={placeMockAsset} calendarUrl={calendarUrl} />
-      ) : null}
-    </main>
+    <details className="tools-panel">
+      <summary>{t("dev.tools")}</summary>
+      <div className="tools-panel-body">
+        <p>{t("dev.toolsLead")}</p>
+        <div className="task-actions">
+          <button
+            className="btn btn-danger"
+            type="button"
+            onClick={() => void appData.resetAllData()}
+            disabled={appData.loading || appData.mutating}
+          >
+            {t("dev.clearEverything")}
+          </button>
+          <button
+            className="btn btn-ghost"
+            type="button"
+            onClick={() => void appData.loadStarterContent()}
+            disabled={appData.loading || appData.mutating}
+          >
+            {t("dev.loadStarter")}
+          </button>
+        </div>
+      </div>
+    </details>
   );
 }
+
+function AppRoutes() {
+  const appData = useAppData();
+  const [view, setView] = useState("dashboard");
+  const navigate = (next) => setView(next);
+
+  return (
+    <>
+      <LanguageSync language={appData.userPreferences?.language} />
+      <LocalModeBanner />
+      <Layout activeView={view} onNavigate={navigate}>
+        <div key={view} className="page-view">
+          {view === "dashboard" && (
+            <PageErrorBoundary pageName="Dashboard">
+              <DashboardPage {...appData} onNavigate={navigate} />
+            </PageErrorBoundary>
+          )}
+          {view === "build" && (
+            <PageErrorBoundary pageName="Build Mode">
+              <BuildModePage {...appData} onNavigate={navigate} />
+            </PageErrorBoundary>
+          )}
+          {view === "home" && (
+            <PageErrorBoundary pageName="My Home" titleKey="home.title" leadKey="home.loadError">
+              <MyHomePage {...appData} onNavigate={navigate} />
+            </PageErrorBoundary>
+          )}
+          {view === "archive" && (
+            <PageErrorBoundary pageName="Homes Archive">
+              <HomesArchivePage {...appData} onNavigate={navigate} />
+            </PageErrorBoundary>
+          )}
+          {view === "history" && (
+            <PageErrorBoundary pageName="History">
+              <HistoryPage {...appData} onNavigate={navigate} />
+            </PageErrorBoundary>
+          )}
+          {view === "settings" && (
+            <PageErrorBoundary pageName="Settings">
+              <SettingsPage {...appData} onNavigate={navigate} onAccountDeleted={() => {}} />
+            </PageErrorBoundary>
+          )}
+        </div>
+
+        {import.meta.env.DEV && view === "dashboard" && <DevToolsPanel appData={appData} />}
+      </Layout>
+    </>
+  );
+}
+
+function App() {
+  return (
+    <AppErrorBoundary>
+      <AuthProvider>
+        <LanguageProvider>
+          <AppRoutes />
+        </LanguageProvider>
+      </AuthProvider>
+    </AppErrorBoundary>
+  );
+}
+
+export default App;

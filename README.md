@@ -1,76 +1,96 @@
 # FocusHome
 
-FocusHome is an AI-assisted focus planning app that turns natural language study/work plans into structured focus sessions. Users complete sessions and gradually build a virtual home through gamified progress. The long-term product direction remains Flutter/mobile-oriented, with secure backend-based AI processing.
+FocusHome is an AI-assisted focus planning app that turns natural language study/work plans into structured focus sessions. Users complete sessions, earn XP/bricks, and build a virtual 5×5 home. The React/Vite frontend talks to a FastAPI backend; the backend is the **single source of truth** for tasks, inventory, and grid state.
 
-This repository currently contains a FastAPI backend scaffold and a temporary React/Vite frontend scaffold. The final product direction is still Flutter/mobile; this web frontend is for weekly assignment/demo progress only.
+**Deployment target (UpSchool final):** React on Vercel or Render Static Site, FastAPI on Render, PostgreSQL via Supabase (`DATABASE_URL`). No AWS. Auth and store submission are out of scope for the current phase.
 
-## Week 4 Frontend Submission (Mock UI)
+## Run locally
 
-> **Update (Week 5):** Dashboard health, Create Task AI parse, and manual save can call the local backend; most other UI state remains mock. See **Frontend ↔ backend** below.
+### Backend
 
-Implemented this week (frontend with mock data):
+From `backend/`:
 
-- Dashboard/home screen with FocusHome description, progress stats, today's tasks, quick actions
-- AI-assisted task creation screen with natural language input and mocked parse result
-- Manual task creation form (title, duration, difficulty, description)
-- Task confirmation/edit flow before AI task is saved
-- Task list with reusable `TaskCard`, status badge, difficulty badge
-- Focus timer screen with local countdown controls (Start, Pause, Complete, Cancel)
-- Reward/inventory UI and mock reward rules
-- Simple 5x5 home grid screen with mock assets and protected filled cells
-- Optional Google Calendar template link UI (no OAuth)
-- Reusable component structure + small design system (theme, global styles)
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
 
-What is mocked:
+- API: http://127.0.0.1:8000  
+- Swagger: http://127.0.0.1:8000/docs  
 
-- AI parse: uses the **live backend** when it is running; otherwise the UI shows a connection error (no silent mock parse).
-- Task list (seed data), timer completion rewards, inventory numbers, and home grid remain **local mock** for this demo (manual save also persists one task on the server, but the UI does not sync full inventory from the API yet).
-- Calendar: client can still build a template link; parsed tasks may include **`calendarUrl`** from the backend.
+### Environment setup
 
-## Run Backend
+1. **Backend:** copy `backend/.env.example` → `backend/.env`, fill optional keys, restart uvicorn.
+2. **Frontend:** copy `frontend/.env.example` → `frontend/.env`, set `VITE_API_BASE_URL`, restart Vite.
 
-1. Open a terminal in `backend/`.
-2. Create and activate a virtual environment.
-3. Install dependencies:
-   - `pip install -r requirements.txt`
-4. Start backend:
-   - `uvicorn main:app --reload --host 0.0.0.0 --port 8000`
+Both `.env` files are gitignored. Never commit real API keys. With `AI_PROVIDER=gemini` and an empty `GEMINI_API_KEY`, parse responses use `source: "heuristic"` and the UI shows **Smart parse**, not **AI**.
 
-## Run Frontend (Temporary React/Vite Scaffold)
+Optional: set `OPENAI_API_KEY` or `GEMINI_API_KEY` for live model parsing.
 
-1. Open another terminal in `frontend/`.
-2. Install dependencies:
-   - `npm install`
-3. Start dev server:
-   - `npm run dev`
-4. Open the local URL shown by Vite (usually `http://127.0.0.1:5173`).
+### Frontend
+
+From `frontend/`:
+
+```powershell
+npm install
+copy .env.example .env
+npm run dev
+```
+
+- UI: http://127.0.0.1:5173  
+- Set **`VITE_API_BASE_URL=http://127.0.0.1:8000`** in `frontend/.env` (default in `.env.example`). **Restart Vite after changing `.env`.**
+
+**Start backend first**, then frontend.
+
+## Frontend ↔ backend (Phase A — full API wiring)
+
+All game state is loaded from and saved to the backend. The UI no longer uses seed mock data for tasks, inventory, or grid.
+
+| User action | API |
+|-------------|-----|
+| App load | `GET /api/tasks`, `GET /api/inventory`, `GET /api/grid` |
+| Dashboard health | `GET /health` |
+| AI parse | `POST /api/ai/parse-task` |
+| Confirm AI task | `POST /api/tasks/from-ai` |
+| Save manual task | `POST /api/tasks/manual` |
+| Delete task (PENDING / ABANDONED) | `DELETE /api/tasks/{id}` |
+| Start focus timer | `PATCH /api/tasks/{id}/start` |
+| Claim reward (timer finished) | `PATCH /api/tasks/{id}/complete` → uses returned `inventory` |
+| Cancel session | `PATCH /api/tasks/{id}/abandon` |
+| Place wall on grid | `POST /api/grid/place` (1 brick) → refreshes inventory |
+| Remove grid cell | `DELETE /api/grid/cells/{x}/{y}` |
+| Calendar link | `POST /api/calendar/template-url` (or `calendarUrl` from parse when present) |
+
+Loading and error states are shown for initial load, task create/confirm, timer actions, grid actions, and calendar link generation. Backend validation errors (e.g. not enough bricks) are surfaced in the UI.
+
+## What is implemented
+
+- FastAPI backend: task lifecycle, rewards, inventory, 5×5 grid, calendar template URLs, optional OpenAI NL parse
+- React UI: dashboard, create task (AI + manual), focus timer, home builder
+- JSON file persistence on backend (`backend/data/state.json`) for local demo
+- Backend pytest suite in `backend/tests/`
+
+## What is not implemented yet
+
+- Full Supabase Auth + Postgres per-user API scoping (account deletion scaffold is in place)
+- Live deployment (Vercel + Render + Supabase)
+- Push notifications, Play Store, advanced animations
+- Flutter mobile app (long-term direction)
+
+### Account deletion
+
+Settings → Account → **Delete account** (requires sign-in). Two-step confirmation + type `DELETE`. Clears local cache and calls `DELETE /api/account`. See `backend/README.md` and `frontend/docs/account-deletion-verification.md`.
+
+See `backend/README.md` for env vars, endpoint details, and curl examples.
 
 ## Screenshots
 
-Add your Week 4 screenshots under `docs/screenshots/` and reference them here:
+Under `docs/screenshots/` (see `docs/screenshots/README.md`).
 
-- `docs/screenshots/dashboard.png`
-- `docs/screenshots/create-task.png`
-- `docs/screenshots/task-confirmation.png`
-- `docs/screenshots/focus-timer.png`
-- `docs/screenshots/home-builder.png`
+## Project docs
 
-## Notes
-
-- The frontend can call the **local FastAPI** for health, AI parse, and manual task create (`VITE_API_BASE_URL`, default `http://127.0.0.1:8000`). Restart Vite after changing `.env`.
-- Google Calendar OAuth is not implemented.
-- Backend API contracts are kept independent so the frontend can later be replaced with Flutter without backend changes.
-## Week 5 backend (MVP API)
-
-The FastAPI backend now exposes task lifecycle, inventory/rewards, grid placement, calendar template URLs, and optional OpenAI-backed NL parsing. See `backend/README.md` for setup, env vars, and `curl` examples.
-
-**Run the backend** on `http://127.0.0.1:8000` (default for `uvicorn` with `--host 0.0.0.0 --port 8000`).
-
-## Frontend ↔ backend (minimal integration)
-
-- Copy `frontend/.env.example` to `frontend/.env` and set **`VITE_API_BASE_URL=http://127.0.0.1:8000`** (or leave the example default).
-- Restart Vite after changing `.env`.
-- **Dashboard** calls **`GET /health`** and shows backend status (or the error: *Backend connection failed. Please start the backend on port 8000.*).
-- **Create Task → Parse with AI** calls **`POST /api/ai/parse-task`** with `text` and `timezone: "Europe/Istanbul"` and fills the parsed/confirm UI from the JSON response (including **`calendarUrl`** when present).
-- **Save Manual Task** calls **`POST /api/tasks/manual`** and adds the returned task to the local list (timer and inventory remain mock/local).
-- Task list, timer rewards, grid, and inventory stats are still **mostly mock/local** for this demo.
+- `docs/focushome_prd.md` — product requirements  
+- `docs/focushome_mvp.md` — MVP scope  
+- `plan.md` — phased execution plan  

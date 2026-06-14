@@ -29,6 +29,9 @@ def default_state() -> dict[str, Any]:
             "size": 5,
             "cells": [],
         },
+        "users": {},
+        "revoked_tokens": [],
+        "mock_auth_users": {},
     }
 
 
@@ -60,6 +63,17 @@ def _merge_defaults(raw: dict[str, Any]) -> dict[str, Any]:
             out["grid"]["grid_id"] = grid["grid_id"]
         if isinstance(grid.get("size"), int):
             out["grid"]["size"] = grid["size"]
+    users = raw.get("users")
+    if isinstance(users, dict):
+        out["users"] = users
+    if isinstance(raw.get("game_data_owner"), str):
+        out["game_data_owner"] = raw["game_data_owner"]
+    revoked = raw.get("revoked_tokens")
+    if isinstance(revoked, list):
+        out["revoked_tokens"] = [str(x) for x in revoked]
+    mock_auth = raw.get("mock_auth_users")
+    if isinstance(mock_auth, dict):
+        out["mock_auth_users"] = mock_auth
     return out
 
 

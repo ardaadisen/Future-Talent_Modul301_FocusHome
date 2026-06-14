@@ -1,4 +1,4 @@
-"""Task CRUD and lifecycle (in-memory + JSON file via storage)."""
+"""Task CRUD and lifecycle — scoped to authenticated user buckets."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from app.schemas import (
     TaskStatus,
 )
 from app.services import ai_service, reward_service
-from app.storage import mutate_state
+from app.user_scope import mutate_user_bucket, task_belongs_to_user
 
 
 def _now_iso() -> str:
@@ -31,11 +31,12 @@ def _find_task_index(tasks: list[dict[str, Any]], task_id: str) -> int:
     return -1
 
 
-def create_manual(payload: ManualTaskCreate) -> TaskObject:
-    def mutator(state: dict[str, Any]) -> TaskObject:
+def create_manual(user_id: str, payload: ManualTaskCreate) -> TaskObject:
+    def mutator(bucket: dict[str, Any]) -> TaskObject:
         tid = str(uuid.uuid4())
         row: dict[str, Any] = {
             "id": tid,
+            "user_id": user_id,
             "title": payload.title[:50],
             "preset_duration": int(payload.preset_duration),
             "actual_duration_seconds": 0,
@@ -50,19 +51,25 @@ def create_manual(payload: ManualTaskCreate) -> TaskObject:
             "description": payload.description,
             "reward_claimed": False,
         }
-        state.setdefault("tasks", []).append(row)
+        bucket.setdefault("tasks", []).append(row)
         return TaskObject.model_validate(row)
 
-    return mutate_state(mutator)
+    return mutate_user_bucket(user_id, mutator)
 
 
-def create_from_ai(payload: TaskFromAIRequest) -> TaskObject:
-    preset = ai_service.nearest_preset_duration(int(payload.durationMinutes))
+def create_from_ai(user_id: str, payload: TaskFromAIRequest) -> TaskObject:
+    delta_seconds = max(
+        int((payload.endDateTime - payload.startDateTime).total_seconds()),
+        int(payload.durationMinutes) * 60,
+        60,
+    )
+    preset = ai_service.nearest_preset_duration(max(1, int(round(delta_seconds / 60))))
 
-    def mutator(state: dict[str, Any]) -> TaskObject:
+    def mutator(bucket: dict[str, Any]) -> TaskObject:
         tid = str(uuid.uuid4())
         row: dict[str, Any] = {
             "id": tid,
+            "user_id": user_id,
             "title": payload.title[:50],
             "preset_duration": preset,
             "actual_duration_seconds": 0,
@@ -77,67 +84,76 @@ def create_from_ai(payload: TaskFromAIRequest) -> TaskObject:
             "description": payload.description or None,
             "reward_claimed": False,
         }
-        state.setdefault("tasks", []).append(row)
+        bucket.setdefault("tasks", []).append(row)
         return TaskObject.model_validate(row)
 
-    return mutate_state(mutator)
+    return mutate_user_bucket(user_id, mutator)
 
 
-def list_tasks() -> list[TaskObject]:
-    from app.storage import read_state
+def list_tasks(user_id: str) -> list[TaskObject]:
+    from app.user_scope import read_user_bucket
 
-    state = read_state()
-    return [TaskObject.model_validate(t) for t in state.get("tasks", [])]
+    bucket = read_user_bucket(user_id)
+    return [TaskObject.model_validate(t) for t in bucket.get("tasks", [])]
 
 
-def get_task(task_id: str) -> TaskObject:
-    from app.storage import read_state
+def get_task(user_id: str, task_id: str) -> TaskObject:
+    from app.user_scope import read_user_bucket
 
-    state = read_state()
-    idx = _find_task_index(state.get("tasks", []), task_id)
+    bucket = read_user_bucket(user_id)
+    idx = _find_task_index(bucket.get("tasks", []), task_id)
     if idx < 0:
         raise AppError(404, "Task not found")
-    return TaskObject.model_validate(state["tasks"][idx])
+    task = bucket["tasks"][idx]
+    if not task_belongs_to_user(task, user_id):
+        raise AppError(403, "Forbidden")
+    return TaskObject.model_validate(task)
 
 
-def start_task(task_id: str) -> TaskObject:
-    def mutator(state: dict[str, Any]) -> TaskObject:
-        tasks = state.setdefault("tasks", [])
+def start_task(user_id: str, task_id: str) -> TaskObject:
+    def mutator(bucket: dict[str, Any]) -> TaskObject:
+        tasks = bucket.setdefault("tasks", [])
         idx = _find_task_index(tasks, task_id)
         if idx < 0:
             raise AppError(404, "Task not found")
         t = tasks[idx]
+        if not task_belongs_to_user(t, user_id):
+            raise AppError(403, "Forbidden")
         if t["status"] != TaskStatus.PENDING.value:
             raise AppError(400, "Only PENDING tasks can be started")
         t["status"] = TaskStatus.ACTIVE.value
         return TaskObject.model_validate(t)
 
-    return mutate_state(mutator)
+    return mutate_user_bucket(user_id, mutator)
 
 
-def abandon_task(task_id: str) -> TaskObject:
-    def mutator(state: dict[str, Any]) -> TaskObject:
-        tasks = state.setdefault("tasks", [])
+def abandon_task(user_id: str, task_id: str) -> TaskObject:
+    def mutator(bucket: dict[str, Any]) -> TaskObject:
+        tasks = bucket.setdefault("tasks", [])
         idx = _find_task_index(tasks, task_id)
         if idx < 0:
             raise AppError(404, "Task not found")
         t = tasks[idx]
+        if not task_belongs_to_user(t, user_id):
+            raise AppError(403, "Forbidden")
         if t["status"] not in (TaskStatus.PENDING.value, TaskStatus.ACTIVE.value):
             raise AppError(400, "Only PENDING or ACTIVE tasks can be abandoned")
         t["status"] = TaskStatus.ABANDONED.value
         return TaskObject.model_validate(t)
 
-    return mutate_state(mutator)
+    return mutate_user_bucket(user_id, mutator)
 
 
-def complete_task(task_id: str) -> TaskCompleteResponse:
-    def mutator(state: dict[str, Any]) -> TaskCompleteResponse:
-        tasks = state.setdefault("tasks", [])
+def complete_task(user_id: str, task_id: str) -> TaskCompleteResponse:
+    def mutator(bucket: dict[str, Any]) -> TaskCompleteResponse:
+        tasks = bucket.setdefault("tasks", [])
         idx = _find_task_index(tasks, task_id)
         if idx < 0:
             raise AppError(404, "Task not found")
         t = tasks[idx]
-        inv = state.setdefault("inventory", {})
+        if not task_belongs_to_user(t, user_id):
+            raise AppError(403, "Forbidden")
+        inv = bucket.setdefault("inventory", {})
 
         if t["status"] == TaskStatus.COMPLETED.value:
             return TaskCompleteResponse(
@@ -162,18 +178,20 @@ def complete_task(task_id: str) -> TaskCompleteResponse:
             inventory=InventoryObject.model_validate(inv),
         )
 
-    return mutate_state(mutator)
+    return mutate_user_bucket(user_id, mutator)
 
 
-def delete_task(task_id: str) -> None:
-    def mutator(state: dict[str, Any]) -> None:
-        tasks = state.setdefault("tasks", [])
+def delete_task(user_id: str, task_id: str) -> None:
+    def mutator(bucket: dict[str, Any]) -> None:
+        tasks = bucket.setdefault("tasks", [])
         idx = _find_task_index(tasks, task_id)
         if idx < 0:
             raise AppError(404, "Task not found")
         t = tasks[idx]
+        if not task_belongs_to_user(t, user_id):
+            raise AppError(403, "Forbidden")
         if t["status"] not in (TaskStatus.PENDING.value, TaskStatus.ABANDONED.value):
             raise AppError(400, "Only PENDING or ABANDONED tasks can be deleted")
         tasks.pop(idx)
 
-    mutate_state(mutator)
+    mutate_user_bucket(user_id, mutator)

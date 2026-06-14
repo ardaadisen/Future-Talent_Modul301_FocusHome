@@ -1,13 +1,13 @@
-"""5x5 home grid placement rules."""
+"""5x5 home grid placement rules — scoped to authenticated user."""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from app.errors import AppError
 from app.schemas import GridMapObject, GridPlaceRequest
-from app.storage import mutate_state, read_state
+from app.user_scope import mutate_user_bucket, read_user_bucket
 
 
 def _cell_index(cells: list[dict[str, Any]], x: int, y: int) -> int:
@@ -17,16 +17,16 @@ def _cell_index(cells: list[dict[str, Any]], x: int, y: int) -> int:
     return -1
 
 
-def get_grid() -> GridMapObject:
-    state = read_state()
-    return GridMapObject.model_validate(state.get("grid", {}))
+def get_grid(user_id: str) -> GridMapObject:
+    bucket = read_user_bucket(user_id)
+    return GridMapObject.model_validate(bucket.get("grid", {}))
 
 
-def place_on_grid(payload: GridPlaceRequest) -> GridMapObject:
-    def mutator(state: dict[str, Any]) -> GridMapObject:
-        grid = state.setdefault("grid", {"grid_id": "main_home", "size": 5, "cells": []})
+def place_on_grid(user_id: str, payload: GridPlaceRequest) -> GridMapObject:
+    def mutator(bucket: dict[str, Any]) -> GridMapObject:
+        grid = bucket.setdefault("grid", {"grid_id": "main_home", "size": 5, "cells": []})
         cells: list[dict[str, Any]] = grid.setdefault("cells", [])
-        inv = state.setdefault("inventory", {})
+        inv = bucket.setdefault("inventory", {})
         res = inv.setdefault("resources", {"bricks": 0, "glass": 0, "roof_tiles": 0})
 
         if _cell_index(cells, payload.x, payload.y) >= 0:
@@ -58,15 +58,15 @@ def place_on_grid(payload: GridPlaceRequest) -> GridMapObject:
         )
         return GridMapObject.model_validate(grid)
 
-    return mutate_state(mutator)
+    return mutate_user_bucket(user_id, mutator)
 
 
-def remove_cell(x: int, y: int) -> GridMapObject:
+def remove_cell(user_id: str, x: int, y: int) -> GridMapObject:
     if x < 0 or x > 4 or y < 0 or y > 4:
         raise AppError(400, "Coordinates out of range")
 
-    def mutator(state: dict[str, Any]) -> GridMapObject:
-        grid = state.setdefault("grid", {"grid_id": "main_home", "size": 5, "cells": []})
+    def mutator(bucket: dict[str, Any]) -> GridMapObject:
+        grid = bucket.setdefault("grid", {"grid_id": "main_home", "size": 5, "cells": []})
         cells: list[dict[str, Any]] = grid.setdefault("cells", [])
         idx = _cell_index(cells, x, y)
         if idx < 0:
@@ -74,4 +74,4 @@ def remove_cell(x: int, y: int) -> GridMapObject:
         cells.pop(idx)
         return GridMapObject.model_validate(grid)
 
-    return mutate_state(mutator)
+    return mutate_user_bucket(user_id, mutator)

@@ -3,23 +3,34 @@ import AppCard from "../components/AppCard";
 import SectionHeader from "../components/SectionHeader";
 import StatCard from "../components/StatCard";
 import TaskCard from "../components/TaskCard";
+import { useLanguage } from "../context/LanguageContext.jsx";
 
-export default function Dashboard({ inventory, tasks, onGotoCreate, onGotoTimer, onSelectTask, backendHealth }) {
+export default function Dashboard({
+  inventory,
+  tasks,
+  onGotoCreate,
+  onGotoTimer,
+  onSelectTask,
+  onDeleteTask,
+  backendHealth,
+  deleteLoadingId,
+  deleteError,
+}) {
+  const { t } = useLanguage();
+
   return (
     <div>
       <SectionHeader
-        title="FocusHome"
-        subtitle="AI-assisted focus planning with rewards and home building."
+        title={t("brand.name")}
+        subtitle={t("scaffold.subtitle")}
       />
 
-      <AppCard title="Backend status">
+      <AppCard title={t("scaffold.backendStatus")}>
         {backendHealth?.state === "loading" ? (
-          <p className="muted">Checking backend…</p>
+          <p className="muted">{t("scaffold.checkingBackend")}</p>
         ) : null}
         {backendHealth?.state === "ok" ? (
-          <p className="muted">
-            Connected — <strong>{backendHealth.service || "ok"}</strong> at {backendHealth.baseUrl}
-          </p>
+          <p className="muted">{t("scaffold.connected")}</p>
         ) : null}
         {backendHealth?.state === "error" ? (
           <p className="text-danger">{backendHealth.message}</p>
@@ -27,25 +38,36 @@ export default function Dashboard({ inventory, tasks, onGotoCreate, onGotoTimer,
       </AppCard>
 
       <div className="stat-grid">
-        <StatCard label="XP" value={inventory.xp} />
-        <StatCard label="Level" value={inventory.level} />
-        <StatCard label="Bricks" value={inventory.bricks} />
-        <StatCard label="Glass / Roof" value={`${inventory.glass} / ${inventory.roofTiles}`} />
+        <StatCard label={t("common.xp")} value={inventory.xp} />
+        <StatCard label={t("common.level")} value={inventory.level} />
+        <StatCard label={t("common.bricks")} value={inventory.bricks} />
+        <StatCard label={t("scaffold.glassRoof")} value={`${inventory.glass} / ${inventory.roofTiles}`} />
       </div>
 
-      <AppCard title="Quick Actions">
+      <AppCard title={t("scaffold.quickActions")}>
         <div className="row">
-          <AppButton onClick={onGotoCreate}>Create a Task</AppButton>
-          <AppButton variant="secondary" onClick={onGotoTimer}>Start Focus</AppButton>
+          <AppButton onClick={onGotoCreate}>{t("scaffold.createTask")}</AppButton>
+          <AppButton variant="secondary" onClick={onGotoTimer}>{t("scaffold.startFocus")}</AppButton>
         </div>
       </AppCard>
 
-      <AppCard title="Today's Focus Tasks">
-        <div className="task-grid">
-          {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onSelect={onSelectTask} />
-          ))}
-        </div>
+      <AppCard title={t("scaffold.focusTasks")}>
+        {deleteError ? <p className="text-danger">{deleteError}</p> : null}
+        {tasks.length === 0 ? (
+          <p className="muted">{t("scaffold.noTasks")}</p>
+        ) : (
+          <div className="task-grid">
+            {tasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onSelect={onSelectTask}
+                onDelete={onDeleteTask}
+                deleteLoading={deleteLoadingId === task.id}
+              />
+            ))}
+          </div>
+        )}
       </AppCard>
     </div>
   );

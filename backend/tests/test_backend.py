@@ -1,12 +1,19 @@
 from fastapi.testclient import TestClient
 
 from main import app
+from tests.auth_helpers import TEST_PASSWORD, register_and_login
 
 client = TestClient(app)
 
 
-def test_list_tasks_empty_by_default():
+def test_list_tasks_requires_auth():
     r = client.get("/api/tasks")
+    assert r.status_code == 401
+
+
+def test_list_tasks_empty_for_new_user():
+    headers = register_and_login(client, "tasks-empty@example.com")
+    r = client.get("/api/tasks", headers=headers)
     assert r.status_code == 200
     assert r.json() == []
 
@@ -23,6 +30,7 @@ def test_api_main():
     data = r.json()
     assert data["app"] == "FocusHome"
     assert data["version"] == "0.1.0"
+    assert data["authMode"] == "mock"
 
 
 def test_parse_task_structure():
@@ -36,20 +44,36 @@ def test_parse_task_structure():
         "title",
         "startDateTime",
         "endDateTime",
+        "durationSeconds",
         "durationMinutes",
         "difficulty",
         "description",
         "confidence",
         "calendarEligible",
+        "source",
     ):
         assert key in data
-    assert data["durationMinutes"] in (15, 30, 45, 60)
+    assert data["durationSeconds"] == 2700
     assert data["difficulty"] in ("EASY", "MEDIUM", "HARD")
+    assert data["source"] in ("heuristic", "mock", "gemini", "openai")
+
+
+def test_parse_task_turkish_two_hours():
+    r = client.post(
+        "/api/ai/parse-task",
+        json={"text": "Yarın 2 saat algoritma çalışacağım", "timezone": "Europe/Istanbul"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["durationSeconds"] == 7200
+    assert data["durationMinutes"] == 120
 
 
 def test_manual_task_and_complete_rewards_once():
+    headers = register_and_login(client, "reward-user@example.com")
     r = client.post(
         "/api/tasks/manual",
+        headers=headers,
         json={
             "title": "Test Task",
             "preset_duration": 30,
@@ -60,24 +84,27 @@ def test_manual_task_and_complete_rewards_once():
     assert r.status_code == 200
     tid = r.json()["id"]
 
-    client.patch(f"/api/tasks/{tid}/start")
-    inv1 = client.patch(f"/api/tasks/{tid}/complete").json()["inventory"]
+    client.patch(f"/api/tasks/{tid}/start", headers=headers)
+    inv1 = client.patch(f"/api/tasks/{tid}/complete", headers=headers).json()["inventory"]
     assert inv1["resources"]["bricks"] == 5
     assert inv1["total_xp"] == 50
 
-    inv2 = client.patch(f"/api/tasks/{tid}/complete").json()["inventory"]
+    inv2 = client.patch(f"/api/tasks/{tid}/complete", headers=headers).json()["inventory"]
     assert inv2["resources"]["bricks"] == 5
     assert inv2["total_xp"] == 50
 
 
 def test_grid_place_blocks_occupied():
+    headers = register_and_login(client, "grid-user@example.com")
     r1 = client.post(
         "/api/grid/place",
+        headers=headers,
         json={"x": 0, "y": 0, "asset_id": "wall_v1", "rotation": 0},
     )
     assert r1.status_code == 200
     r2 = client.post(
         "/api/grid/place",
+        headers=headers,
         json={"x": 0, "y": 0, "asset_id": "wall_v1", "rotation": 0},
     )
     assert r2.status_code == 409

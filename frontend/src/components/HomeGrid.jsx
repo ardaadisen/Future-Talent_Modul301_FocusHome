@@ -1,4 +1,5 @@
 import AppCard from "./AppCard";
+import { useLanguage } from "../context/LanguageContext.jsx";
 
 const ASSET_LABEL = {
   empty: "",
@@ -7,9 +8,11 @@ const ASSET_LABEL = {
   roof: "ROOF",
 };
 
-export default function HomeGrid({ grid, onPlaceAsset }) {
+export default function HomeGrid({ grid, onPlaceAsset, onRemoveAsset, disabled }) {
+  const { t } = useLanguage();
+
   return (
-    <AppCard title="5x5 Home Grid">
+    <AppCard title={t("grid.title")}>
       <div className="grid5">
         {grid.flatMap((row, rIdx) =>
           row.map((cell, cIdx) => {
@@ -19,8 +22,15 @@ export default function HomeGrid({ grid, onPlaceAsset }) {
                 type="button"
                 key={`${rIdx}-${cIdx}`}
                 className={`cell ${filled ? "cell-filled" : ""}`}
-                onClick={() => onPlaceAsset(rIdx, cIdx)}
-                title={filled ? "Occupied cell" : "Place mock wall"}
+                disabled={disabled}
+                onClick={() => {
+                  if (filled) {
+                    onRemoveAsset?.(rIdx, cIdx);
+                  } else {
+                    onPlaceAsset?.(rIdx, cIdx);
+                  }
+                }}
+                title={filled ? t("grid.clickRemove") : t("grid.clickPlace")}
               >
                 {ASSET_LABEL[cell]}
               </button>
@@ -29,7 +39,7 @@ export default function HomeGrid({ grid, onPlaceAsset }) {
         )}
       </div>
       <p className="muted" style={{ marginBottom: 0 }}>
-        Click an empty cell to place a mock wall. Filled cells are protected.
+        {t("grid.legend")}
       </p>
     </AppCard>
   );
